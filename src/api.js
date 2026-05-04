@@ -50,7 +50,10 @@ export async function updateCardStep(cardId, stepId) {
     },
     body: JSON.stringify(payload)
   })
-  if (!res.ok) throw new Error('Erro ao atualizar etapa do card')
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Erro atualizar etapa (HTTP ${res.status}): ${text}`)
+  }
   return res.json()
 }
 
@@ -64,7 +67,10 @@ export async function addCardNote(cardId, text) {
     },
     body: JSON.stringify(payload)
   })
-  if (!res.ok) throw new Error('Erro ao adicionar anotação')
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Erro ao adicionar anotação (HTTP ${res.status}): ${text}`)
+  }
   return res.json()
 }
 
