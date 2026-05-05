@@ -10,5 +10,6 @@ export const TAGS = {
   Mastigação: '5c735bac-3286-45cb-95aa-bcd6e97a2ffc',
   Estética: '8f57a996-bc26-47ac-b8b8-ee72da1044fe',
   Alta: '19b22c78-dcd0-44b0-9b27-16aa67c9d58d',
-  Baixa: '1e3fabcf-905f-4902-9758-4758c4324547'
+  Baixa: '1e3fabcf-905f-4902-9758-4758c4324547',
+  Agendado: '47870808-399c-45c3-b056-a2c66c8ae337'
 }

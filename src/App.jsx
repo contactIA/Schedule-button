@@ -54,7 +54,7 @@ function App() {
       
       let finalDescription = descricao.trim()
       let extraInfo = []
-      const selectedTags = []
+      const selectedTags = [TAGS.Agendado] // Sempre inclui a tag Agendado
       
       if (dor) {
         extraInfo.push(`Dor: ${dor}`)
