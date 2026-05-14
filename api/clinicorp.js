@@ -78,8 +78,8 @@ export default async function handler(req, res) {
     MobilePhone: patientPhone ? patientPhone.replace(/\D/g, '') : '',
     ProfessionalId: Number(dentistId),
     Date: dateLocal,
-    FromTime: fromTime,
-    ToTime: toTime,
+    From: fromTime,
+    To: toTime,
     Notes: notes || 'Agendamento via Prime Agendamento',
   }
 
