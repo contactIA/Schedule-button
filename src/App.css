@@ -368,12 +368,65 @@ body {
 .slot-row-time { font-size: 14px; font-weight: 500; color: #334155; }
 .slot-row-prof  { font-size: 12px; color: #94a3b8; }
 
+/* ── Professional Banner ── */
+.prof-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.prof-avatar {
+  width: 38px; height: 38px; min-width: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff; font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(37,99,235,0.3);
+}
+
+.prof-info {
+  display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;
+}
+
+.prof-name {
+  font-size: 13px; font-weight: 700; color: #0f172a;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.prof-role {
+  font-size: 11px; color: #64748b;
+}
+
+.prof-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 6px;
+  background: #eff6ff; color: #2563eb;
+  border: 1px solid #bfdbfe;
+  text-transform: uppercase; letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.slot-row-check {
+  font-size: 13px; font-weight: 800; color: #1d4ed8;
+}
+
 /* ── Slot Summary ── */
 .slot-summary {
   margin: 0 28px;
-  font-size: 13px; font-weight: 600; color: #15803d;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 500; color: #15803d;
   background: #f0fdf4; border: 1px solid #bbf7d0;
   border-radius: 8px; padding: 10px 14px;
+}
+
+.slot-summary-icon {
+  font-size: 15px; font-weight: 800; color: #16a34a;
+  flex-shrink: 0;
+}
+
+.slot-summary-prof {
+  font-weight: 600; color: #166534;
 }
 
 /* ── Step 2 Actions ── */

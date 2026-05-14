@@ -66,7 +66,7 @@ export default async function handler(req, res) {
     const date = req.query?.date
     if (!date) return res.status(400).json({ error: 'Parâmetro date obrigatório (YYYY-MM-DD)' })
     try {
-      const url = `${BASE}/appointment/get_avaliable_times_calendar?subscriber_id=${SUBSCRIBER_ID}&date=${date}`
+      const url = `${BASE}/appointment/get_avaliable_times_calendar?subscriber_id=${SUBSCRIBER_ID}&code_link=${CODE_LINK}&date=${date}`
       const r = await fetch(url, { headers: { Authorization: AUTH } })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({}))

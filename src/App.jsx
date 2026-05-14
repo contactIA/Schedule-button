@@ -419,22 +419,32 @@ function App() {
                 {selectedDate && (
                   <div className="slots-section">
                     <div className="slots-header">Horários disponíveis</div>
+
+                    {/* Profissional fixo */}
+                    <div className="prof-banner">
+                      <div className="prof-avatar">A</div>
+                      <div className="prof-info">
+                        <span className="prof-name">Dr. Alex Fernando Santos da Silva</span>
+                        <span className="prof-role">Dentista responsável pelos agendamentos</span>
+                      </div>
+                      <span className="prof-badge">Exclusivo</span>
+                    </div>
+
                     {slotsLoading && (
                       <div className="slots-loading-row">
                         <span className="spinner spinner-dark" />
-                        Buscando horários...
+                        Buscando horários disponíveis para Dr. Alex...
                       </div>
                     )}
                     {slotsError && (
                       <p className="slots-msg slots-msg-error">⚠ {slotsError}</p>
                     )}
                     {!slotsLoading && !slotsError && availableSlots.length === 0 && (
-                      <p className="slots-msg">Nenhum horário disponível para esta data.</p>
+                      <p className="slots-msg">Dr. Alex não possui horários disponíveis nesta data.</p>
                     )}
                     {!slotsLoading && availableSlots.length > 0 && (
                       <div className="slots-list">
                         {availableSlots.map((slot, i) => {
-                          const prof = CLINICORP_PROFESSIONALS.find(p => p.id === slot.professionalId)
                           const isActive = selectedSlot?.from === slot.from && selectedSlot?.professionalId === slot.professionalId
                           return (
                             <button
@@ -444,7 +454,7 @@ function App() {
                               onClick={() => setSelectedSlot(isActive ? null : slot)}
                             >
                               <span className="slot-row-time">{slot.from} às {slot.to}</span>
-                              {prof && <span className="slot-row-prof">{prof.name.split(' ')[0]}</span>}
+                              {isActive && <span className="slot-row-check">✓</span>}
                             </button>
                           )
                         })}
@@ -457,8 +467,12 @@ function App() {
               {/* Selected slot summary */}
               {selectedSlot && (
                 <div className="slot-summary">
-                  ✓ {selectedDate} às {selectedSlot.from}
-                  {selectedProf ? ` · ${selectedProf.name.split(' ')[0]}` : ''}
+                  <span className="slot-summary-icon">✓</span>
+                  <span>
+                    <strong>{selectedDate}</strong> às <strong>{selectedSlot.from}</strong>
+                    {' · '}
+                    <span className="slot-summary-prof">Dr. Alex Fernando Santos da Silva</span>
+                  </span>
                 </div>
               )}
 
