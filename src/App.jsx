@@ -216,13 +216,6 @@ function App() {
 
       <main className="main">
         <div className="form-container">
-<<<<<<< HEAD
-          <div className="form-header">
-            <div className="header-title-row">
-              <h3>{existingCard ? 'Atualizar Agendamento' : 'Novo Agendamento'}</h3>
-              {existingCard && <span className="badge badge-found">Card Localizado</span>}
-              {!existingCard && contactId && !isLoadingContact && <span className="badge badge-not-found">Card será criado</span>}
-=======
 
           {/* Contact bar */}
           {contactId && (
@@ -247,7 +240,6 @@ function App() {
                     : <span className="badge badge-new">Novo Card</span>}
                 </div>
               )}
->>>>>>> c621930 (feat: redesign fluxo em 2 etapas + corrige erro 400 Clinicorp)
             </div>
           )}
 
