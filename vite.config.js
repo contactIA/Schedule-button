@@ -1,5 +1,27 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { pathToFileURL, fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+function buildRes(nodeRes) {
+  let statusCode = 200
+
+  const json = (data) => {
+    if (!nodeRes.headersSent) {
+      nodeRes.writeHead(statusCode, { 'Content-Type': 'application/json' })
+    }
+    nodeRes.end(JSON.stringify(data))
+  }
+
+  nodeRes.status = (code) => {
+    statusCode = code
+    return { json }
+  }
+  nodeRes.json = json
+  return nodeRes
+}
 
 function localApiPlugin() {
   return {
@@ -7,6 +29,8 @@ function localApiPlugin() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url.startsWith('/api/clinicorp')) return next()
+
+        buildRes(res)
 
         // Parse query string
         const urlObj = new URL(req.url, 'http://localhost')
@@ -23,23 +47,17 @@ function localApiPlugin() {
           })
         }
 
-        // Response shim compatible with Next.js/Express-style handlers
-        let statusCode = 200
-        const sendJson = (data) => {
-          if (!res.headersSent) {
-            res.writeHead(statusCode, { 'Content-Type': 'application/json' })
-          }
-          res.end(JSON.stringify(data))
-        }
-        res.status = (code) => { statusCode = code; return { json: sendJson } }
-        res.json   = sendJson
-
         try {
-          const { default: handler } = await import('./api/clinicorp.js')
+          // Usa URL absoluta (file://) para garantir resolução correta em ESM
+          const handlerUrl = pathToFileURL(resolve(__dirname, 'api/clinicorp.js')).href
+          const { default: handler } = await import(handlerUrl)
           await handler(req, res)
         } catch (err) {
-          console.error('[local-api] clinicorp error:', err)
-          if (!res.headersSent) res.status(500).json({ error: err.message })
+          console.error('[local-api] Erro no handler Clinicorp:', err)
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: err.message }))
+          }
         }
       })
     }
