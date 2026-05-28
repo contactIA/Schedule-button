@@ -170,7 +170,7 @@ function App() {
             dentistId: selectedSlot.professionalId,
             dateLocal: selectedDate,
             fromTime: selectedSlot.from,
-            duracao: 30,
+            toTime: selectedSlot.to,
             notes: finalDescription || 'Agendamento via Prime Agendamento',
           })
           clinicorpStatus = 'ok'

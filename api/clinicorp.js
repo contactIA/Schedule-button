@@ -10,12 +10,6 @@ function normTime(t) {
   return `${String(Number(h)).padStart(2, '0')}:${String(Number(m || 0)).padStart(2, '0')}`
 }
 
-function addMinutes(time, minutes) {
-  const [h, m] = time.split(':').map(Number)
-  const total = h * 60 + m + Number(minutes)
-  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-}
-
 async function clinicorpFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers: { Authorization: AUTH, 'Content-Type': 'application/json', ...options.headers } })
   const text = await res.text()
@@ -25,6 +19,43 @@ async function clinicorpFetch(url, options = {}) {
     console.error(`[Clinicorp] ${options.method || 'GET'} ${url} → ${res.status}`, JSON.stringify(body))
   }
   return { ok: res.ok, status: res.status, body }
+}
+
+async function findPatientByPhone(phone) {
+  const cleanPhone = phone ? phone.replace(/\D/g, '') : ''
+  if (!cleanPhone) return null
+
+  const { ok, body } = await clinicorpFetch(
+    `${BASE}/patient/get?subscriber_id=${SUBSCRIBER_ID}&Phone=${cleanPhone}`
+  )
+
+  const patient = Array.isArray(body) ? body[0] : body
+  if (ok && patient?.PatientId) {
+    console.log('[Clinicorp] Paciente encontrado:', patient.PatientId)
+    return patient
+  }
+  return null
+}
+
+async function createPatient(name, phone) {
+  const cleanPhone = phone ? phone.replace(/\D/g, '') : ''
+  const { ok, body } = await clinicorpFetch(`${BASE}/patient/create`, {
+    method: 'POST',
+    body: JSON.stringify({
+      subscriber_id: SUBSCRIBER_ID,
+      Name: name,
+      MobilePhone: cleanPhone,
+      IgnoreSameName: 'X',
+    })
+  })
+
+  if (ok) {
+    console.log('[Clinicorp] Paciente criado:', JSON.stringify(body))
+    return body
+  }
+
+  console.warn('[Clinicorp] Falha ao criar paciente:', JSON.stringify(body))
+  return null
 }
 
 export default async function handler(req, res) {
@@ -63,48 +94,57 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // ── POST: cria agendamento via create_online_scheduling ──────────────────
-  const { patientName, patientPhone, dentistId, dateLocal, fromTime, duracao = 30, notes } = req.body || {}
+  // ── POST: busca/cria paciente e agenda ───────────────────────────────────
+  const { patientName, patientPhone, dentistId, dateLocal, fromTime, toTime, notes } = req.body || {}
 
-  if (!patientName || !dentistId || !dateLocal || !fromTime) {
-    return res.status(400).json({ error: 'Campos obrigatórios: patientName, dentistId, dateLocal, fromTime' })
+  if (!patientName || !dentistId || !dateLocal || !fromTime || !toTime) {
+    return res.status(400).json({ error: 'Campos obrigatórios: patientName, dentistId, dateLocal, fromTime, toTime' })
   }
-
-  const toTime = addMinutes(fromTime, duracao)
-
-  // Payload conforme schema da doc: /appointment/create_online_scheduling
-  const payload = {
-    CodeLink: CODE_LINK,
-    PatientName: patientName,
-    MobilePhone: patientPhone ? patientPhone.replace(/\D/g, '') : '',
-    fromTime: fromTime,
-    toTime: toTime,
-    date: dateLocal,
-    Dentist_PersonId: Number(dentistId),
-    Clinic_BusinessId: BUSINESS_ID,
-    IsOnlineScheduling: true,
-    SchedulingReason: notes || 'Agendamento via Prime Agendamento',
-  }
-
-  console.log('[Clinicorp POST] payload:', JSON.stringify(payload))
 
   try {
+    // Passo 1: verificar se o paciente já existe no Clinicorp
+    let alreadyPatient = false
+    const existingPatient = await findPatientByPhone(patientPhone)
+
+    if (existingPatient) {
+      alreadyPatient = true
+    } else {
+      // Passo 2: criar o paciente se não existir
+      const newPatient = await createPatient(patientName, patientPhone)
+      alreadyPatient = newPatient !== null
+    }
+
+    // Passo 3: criar o agendamento
+    const payload = {
+      CodeLink: CODE_LINK,
+      PatientName: patientName,
+      MobilePhone: patientPhone ? patientPhone.replace(/\D/g, '') : '',
+      fromTime: fromTime,
+      toTime: toTime,
+      date: `${dateLocal}T03:00:00.000Z`,
+      Dentist_PersonId: Number(dentistId),
+      Clinic_BusinessId: BUSINESS_ID,
+      IsOnlineScheduling: true,
+      AlreadyPatient: alreadyPatient,
+      SchedulingReason: notes || 'Agendamento via Prime Agendamento',
+    }
+
+    console.log('[Clinicorp POST] payload:', JSON.stringify(payload))
+
     const { ok, status, body } = await clinicorpFetch(
       `${BASE}/appointment/create_online_scheduling`,
       { method: 'POST', body: JSON.stringify(payload) }
     )
 
-    if (!ok) {
-      const errorMsg = body.Message || body.message || body.error || `Erro ao criar agendamento (${status})`
+    if (!ok || body.isBusy) {
+      const errorMsg = body.msg || body.Message || body.message || body.error || `Erro ao criar agendamento (${status})`
       console.error('[Clinicorp POST] resposta de erro:', JSON.stringify(body))
-      return res.status(status).json({
-        error: errorMsg,
-        detail: body,
-      })
+      return res.status(400).json({ error: errorMsg, detail: body })
     }
 
     console.log('[Clinicorp POST] sucesso:', JSON.stringify(body))
     return res.status(200).json({ success: true, data: body })
+
   } catch (err) {
     console.error('[Clinicorp POST] exception:', err.message)
     return res.status(500).json({ error: err.message })

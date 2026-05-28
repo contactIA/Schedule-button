@@ -101,6 +101,8 @@ export async function createCard(stepId, title, description, contactId, dueDate 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    console.error('[createCard] payload enviado:', payload)
+    console.error('[createCard] resposta erro:', res.status, err)
     const errMsg = err.message || err.error || err.detail || JSON.stringify(err)
     throw new Error(`Erro ao criar card (HTTP ${res.status}): ${errMsg}`)
   }
