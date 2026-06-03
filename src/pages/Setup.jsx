@@ -348,15 +348,20 @@ function AdminForm({ onSuccess }) {
               <button
                 type="button"
                 className="admin-btn-secondary"
-                style={{ width: '100%' }}
+                style={{ width: '100%', opacity: !helenaToken.trim() ? 0.4 : 1 }}
                 disabled={!helenaToken.trim() || stepsLoading}
                 onClick={handleVerifyHelena}
               >
                 {stepsLoading
                   ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Buscando etapas...</span>
-                  : '🔍 Verificar token e carregar etapas'}
+                  : helenaSteps.length > 0
+                    ? '✓ Etapas carregadas — clique para recarregar'
+                    : '🔍 Verificar token e carregar etapas'}
               </button>
-              {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>{stepsError}</span>}
+              {!helenaToken.trim() && (
+                <span className="admin-field-hint">Preencha o token acima para habilitar.</span>
+              )}
+              {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>⚠ {stepsError}</span>}
             </div>
 
             {helenaSteps.length > 0 && (
