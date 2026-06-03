@@ -208,7 +208,7 @@ function AdminForm({ onSuccess }) {
     setHelenaSteps([])
     setAgendadoStepId('')
     try {
-      const res = await fetch(`/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}`)
+      const res = await fetch(`/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}&_t=${Date.now()}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
       setHelenaSteps(data.steps ?? [])
