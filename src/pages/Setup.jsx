@@ -182,6 +182,10 @@ function AdminForm({ onSuccess }) {
   const [slug, setSlug] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [helenaToken, setHelenaToken] = useState('')
+  const [helenaSteps, setHelenaSteps] = useState([])       // etapas carregadas do painel
+  const [agendadoStepId, setAgendadoStepId] = useState('') // etapa escolhida pelo admin
+  const [stepsLoading, setStepsLoading] = useState(false)
+  const [stepsError, setStepsError] = useState('')
   const [clinicorpUser, setClinicorpUser] = useState('')
   const [clinicorpToken, setClinicorpToken] = useState('')
   const [subscriberId, setSubscriberId] = useState('')
@@ -195,6 +199,25 @@ function AdminForm({ onSuccess }) {
   const handleSlugChange = (val) => {
     setSlug(toSlug(val))
     setSlugEdited(true)
+  }
+
+  const handleVerifyHelena = async () => {
+    if (!helenaToken.trim()) return
+    setStepsLoading(true)
+    setStepsError('')
+    setHelenaSteps([])
+    setAgendadoStepId('')
+    try {
+      const res = await fetch(`/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
+      setHelenaSteps(data.steps ?? [])
+      if (data.steps?.length > 0) setAgendadoStepId(data.steps[0].id)
+    } catch (err) {
+      setStepsError(err.message)
+    } finally {
+      setStepsLoading(false)
+    }
   }
 
   const handleNext = (e) => {
@@ -212,7 +235,7 @@ function AdminForm({ onSuccess }) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
+        body: JSON.stringify({ clinicName, slug, helenaToken, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
@@ -312,30 +335,52 @@ function AdminForm({ onSuccess }) {
                 <input
                   type="password"
                   value={helenaToken}
-                  onChange={e => setHelenaToken(e.target.value)}
+                  onChange={e => { setHelenaToken(e.target.value); setHelenaSteps([]); setAgendadoStepId('') }}
                   placeholder="pn_xxxxxxxxxxxxxxxxxxxx"
                   required
                   autoFocus
                 />
                 <span className="admin-token-prefix">Bearer</span>
               </div>
-              <span className="admin-field-hint">
-                Após salvar, o sistema buscará automaticamente painéis, etapas e etiquetas.
-              </span>
             </div>
 
-            <div className="admin-info-box">
-              <strong>O que será buscado automaticamente:</strong>
-              <ul>
-                <li>Painéis disponíveis</li>
-                <li>Etapas do funil</li>
-                <li>Etiquetas de contato</li>
-              </ul>
+            <div className="admin-field">
+              <button
+                type="button"
+                className="admin-btn-secondary"
+                style={{ width: '100%' }}
+                disabled={!helenaToken.trim() || stepsLoading}
+                onClick={handleVerifyHelena}
+              >
+                {stepsLoading
+                  ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Buscando etapas...</span>
+                  : '🔍 Verificar token e carregar etapas'}
+              </button>
+              {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>{stepsError}</span>}
             </div>
+
+            {helenaSteps.length > 0 && (
+              <div className="admin-field">
+                <label>Qual etapa aciona o calendário do Clinicorp? *</label>
+                <select
+                  value={agendadoStepId}
+                  onChange={e => setAgendadoStepId(e.target.value)}
+                  required
+                  style={{ width:'100%', padding:'11px 14px', border:'1.5px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', fontFamily:'inherit' }}
+                >
+                  {helenaSteps.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <span className="admin-field-hint">
+                  Quando o operador selecionar esta etapa, o calendário do Clinicorp será exibido.
+                </span>
+              </div>
+            )}
 
             <div className="admin-actions">
               <button type="button" className="admin-btn-secondary" onClick={handleBack}>← Voltar</button>
-              <button type="submit" className="admin-btn-primary" disabled={!helenaToken}>
+              <button type="submit" className="admin-btn-primary" disabled={!helenaToken || !agendadoStepId}>
                 Próximo →
               </button>
             </div>

@@ -39,16 +39,9 @@ async function fetchHelenaConfig(token) {
   const panels = Array.isArray(panelsBody) ? panelsBody : (panelsBody.items ?? [])
   if (panels.length === 0) throw new Error('Nenhum painel encontrado na conta Helena.')
 
-  const panel   = panels[0]
-  const panelId = panel.id
+  const panelId = panels[0].id
 
-  const { ok: okPanel, body: panelData } = await helenaGet(`/crm/v1/panel/${panelId}`, token)
-  if (!okPanel) throw new Error(`Erro ao buscar etapas do painel: ${JSON.stringify(panelData)}`)
-
-  const steps = panelData.steps ?? panelData.columns ?? panelData.stepList ?? []
-  const agendadoStep = steps.find(s => (s.name ?? s.title ?? '').toLowerCase().includes('agendado'))
-  if (!agendadoStep) throw new Error('Nenhuma etapa com "agendado" no nome encontrada. Renomeie a etapa no Helena.')
-
+  // Busca tags do workspace
   const { body: tagsBody } = await helenaGet('/core/v1/tag/list', token)
   const tags = (Array.isArray(tagsBody) ? tagsBody : (tagsBody.items ?? [])).map(t => ({
     id:     t.id,
@@ -56,7 +49,7 @@ async function fetchHelenaConfig(token) {
     locked: false,
   }))
 
-  return { panelId, agendadoStepId: agendadoStep.id, tags }
+  return { panelId, tags }
 }
 
 async function clinicorpGet(path, auth) {
@@ -94,7 +87,7 @@ async function fetchClinicorpConfig(user, token, subscriberId) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
+  const { clinicName, slug, helenaToken, agendadoStepId, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
   // subscriberId pode ser CNPJ ou o próprio usuário da API — fallback para o usuário
   const subscriberId = (req.body?.subscriberId || clinicorpUser || '').trim()
 
@@ -134,7 +127,7 @@ export default async function handler(req, res) {
         name:                    clinicName,
         helena_token:            helenaToken,
         helena_panel_id:         helenaConfig.panelId,
-        helena_agendado_step_id: helenaConfig.agendadoStepId,
+        helena_agendado_step_id: agendadoStepId,
         helena_tags:             helenaConfig.tags,
         helena_account_id:       accountId ?? null,
         clinicorp_user:          clinicorpUser,
