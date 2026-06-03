@@ -185,6 +185,8 @@ function AdminForm({ onSuccess }) {
   const [helenaToken, setHelenaToken] = useState('')
   const [clinicorpUser, setClinicorpUser] = useState('')
   const [clinicorpToken, setClinicorpToken] = useState('')
+  const [subscriberId, setSubscriberId] = useState('')
+  const [submitError, setSubmitError] = useState('')
 
   const handleNameChange = (val) => {
     setClinicName(val)
@@ -206,10 +208,21 @@ function AdminForm({ onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    // TODO: integrar com Supabase — por enquanto simula 1.5s e vai para sucesso
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    onSuccess({ clinicName, slug })
+    setSubmitError('')
+    try {
+      const res = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, subscriberId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
+      onSuccess({ clinicName, slug, professionalsCount: data.professionalsCount })
+    } catch (err) {
+      setSubmitError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -356,6 +369,19 @@ function AdminForm({ onSuccess }) {
               />
             </div>
 
+            <div className="admin-field">
+              <label>CNPJ da clínica (subscriber_id) *</label>
+              <input
+                type="text"
+                value={subscriberId}
+                onChange={e => setSubscriberId(e.target.value.replace(/\D/g, ''))}
+                placeholder="Ex: 43945422000142"
+                required
+                maxLength={14}
+              />
+              <span className="admin-field-hint">Apenas números, sem pontuação.</span>
+            </div>
+
             <div className="admin-info-box">
               <strong>O que será buscado automaticamente:</strong>
               <ul>
@@ -366,9 +392,13 @@ function AdminForm({ onSuccess }) {
               </ul>
             </div>
 
+            {submitError && (
+              <div className="admin-error-box">{submitError}</div>
+            )}
+
             <div className="admin-actions">
               <button type="button" className="admin-btn-secondary" onClick={handleBack}>← Voltar</button>
-              <button type="submit" className="admin-btn-primary" disabled={!clinicorpUser || !clinicorpToken || loading}>
+              <button type="submit" className="admin-btn-primary" disabled={!clinicorpUser || !clinicorpToken || !subscriberId || loading}>
                 {loading
                   ? <span className="admin-btn-loading"><span className="admin-spinner" />Salvando...</span>
                   : 'Cadastrar clínica'}
@@ -397,7 +427,10 @@ function Success({ data, onNew }) {
       <div className="admin-card success-card">
         <div className="success-icon">✓</div>
         <h2 className="success-title">Clínica cadastrada!</h2>
-        <p className="success-sub"><strong>{data.clinicName}</strong> foi adicionada ao sistema com sucesso.</p>
+        <p className="success-sub">
+          <strong>{data.clinicName}</strong> foi adicionada com sucesso.
+          {data.professionalsCount > 0 && ` ${data.professionalsCount} profissional(is) importado(s).`}
+        </p>
 
         <div className="success-url-box">
           <span className="success-url-label">URL gerada</span>

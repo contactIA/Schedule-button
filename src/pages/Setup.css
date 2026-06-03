@@ -687,6 +687,17 @@
 
 .admin-btn-secondary:hover { background: #e2e8f0 }
 
+/* Error box */
+.admin-error-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #dc2626;
+  line-height: 1.5;
+}
+
 /* Loading state */
 .admin-btn-loading {
   display: flex;

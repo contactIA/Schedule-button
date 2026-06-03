@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/proxy.js": { "maxDuration": 15 },
-    "api/clinicorp.js": { "maxDuration": 15 }
+    "api/clinicorp.js": { "maxDuration": 15 },
+    "api/setup.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/setup", "destination": "/index.html" }
