@@ -4,11 +4,6 @@ const BUSINESS_ID = 6505624431493120
 const CODE_LINK = 75094
 const BASE = 'https://api.clinicorp.com/rest/v1'
 
-function normTime(t) {
-  if (!t) return ''
-  const [h, m] = t.split(':')
-  return `${String(Number(h)).padStart(2, '0')}:${String(Number(m || 0)).padStart(2, '0')}`
-}
 
 async function clinicorpFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers: { Authorization: AUTH, 'Content-Type': 'application/json', ...options.headers } })
@@ -80,8 +75,8 @@ export default async function handler(req, res) {
       const slots = raw
         .filter(s => s.isSelectable !== false)
         .map(s => ({
-          from: normTime(s.From),
-          to: normTime(s.To),
+          from: s.From,
+          to: s.To,
           professionalId: String(s.ProfessionalId),
         }))
 

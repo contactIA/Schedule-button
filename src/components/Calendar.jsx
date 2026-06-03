@@ -1,3 +1,5 @@
+import { toDateStr } from '../utils/date'
+
 const WEEKDAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
@@ -8,10 +10,6 @@ function buildCalendarDays(year, month) {
   for (let i = 0; i < firstDay; i++) days.push(null)
   for (let d = 1; d <= daysInMonth; d++) days.push(d)
   return days
-}
-
-function toDateStr(year, month, day) {
-  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 export default function Calendar({ viewYear, viewMonth, selectedDate, todayStr, onDayClick, onPrevMonth, onNextMonth }) {

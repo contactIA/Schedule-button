@@ -5,11 +5,8 @@ import { STEPS, STEP_NAMES, TAGS, CLINICORP_PROFESSIONALS } from './config'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
+import { toDateStr } from './utils/date'
 import './App.css'
-
-function toDateStr(year, month, day) {
-  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
 
 // Detecta números privados/mascarados do WhatsApp (lid@, @g.us, etc.)
 function isPhonePrivate(phone) {
@@ -385,14 +382,15 @@ function App() {
                 )}
               </div>
 
-              {selectedSlot && (
-                <div className="slot-summary">
-                  ✓ {selectedDate} às {selectedSlot.from}
-                  {CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId)?.name.split(' ')[0]
-                    ? ` · ${CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId).name.split(' ')[0]}`
-                    : ''}
-                </div>
-              )}
+              {selectedSlot && (() => {
+                const prof = CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId)
+                return (
+                  <div className="slot-summary">
+                    ✓ {selectedDate} às {selectedSlot.from}
+                    {prof ? ` · ${prof.name.split(' ')[0]}` : ''}
+                  </div>
+                )
+              })()}
 
               <div className="step2-actions">
                 <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
