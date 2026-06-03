@@ -47,7 +47,6 @@ function NoClinic() {
         >
           Sou administrador →
         </button>
-        <span className="no-clinic-hint">contactia.com.br · Schedule Button</span>
       </div>
     </div>
   )
