@@ -16,109 +16,108 @@ function toSlug(str) {
 
 // ── Landing ──────────────────────────────────────────────────────
 function Landing({ onUnlock }) {
-  const [clicks, setClicks] = useState(0)
-  const timerRef = useRef(null)
-
-  const handleLockClick = () => {
-    clearTimeout(timerRef.current)
-    const next = clicks + 1
-    setClicks(next)
-    if (next >= 1) { onUnlock(); setClicks(0); return }
-    timerRef.current = setTimeout(() => setClicks(0), 2000)
-  }
-
   return (
     <div className="landing">
+
+      {/* Nav */}
       <nav className="landing-nav">
         <div className="landing-logo">
-          <div className="landing-logo-mark">S</div>
-          <span className="landing-logo-text">Schedule Button</span>
+          <div className="landing-logo-mark">
+            <span>S</span>
+          </div>
+          <div className="landing-logo-text">
+            <span className="landing-logo-name">Schedule Button</span>
+            <span className="landing-logo-by">by contactIA</span>
+          </div>
         </div>
-        <span className="landing-nav-tag">by contactIA</span>
+        <button className="landing-admin-btn" onClick={onUnlock}>
+          Acessar painel admin
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2.5 7h9M7.5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
       </nav>
 
+      {/* Hero */}
       <section className="landing-hero">
-        <div className="landing-hero-badge">Integração dupla · Helena + Clinicorp</div>
+        <div className="landing-hero-badge">
+          <span className="landing-badge-dot" />
+          Helena CRM · Clinicorp · Agendamento em 1 clique
+        </div>
         <h1 className="landing-hero-title">
           Agendamentos clínicos<br />
-          <em>em um único clique</em>
+          <span className="landing-hero-gradient">simplificados.</span>
         </h1>
         <p className="landing-hero-sub">
-          Conecte seu CRM ao sistema de gestão da clínica. O operador seleciona
-          a etapa, escolhe o horário — o sistema cuida do resto.
+          O operador abre o botão a partir de uma conversa no WhatsApp,
+          seleciona a etapa, escolhe o horário — e o sistema cuida de tudo.
+          Card criado no CRM e consulta agendada no Clinicorp, simultaneamente.
         </p>
-        <div className="landing-hero-url">
-          <span className="landing-hero-url-prefix">app.contactia.com.br</span>
-          <span className="landing-hero-url-param">?clinic=<em>sua-clinica</em>&amp;contactId=...</span>
+        <div className="landing-hero-actions">
+          <button className="landing-cta-primary" onClick={onUnlock}>
+            Cadastrar minha clínica
+          </button>
+          <div className="landing-hero-url">
+            <span className="landing-hero-url-dot" />
+            <code>?idconta=<em>minha-clinica</em>&amp;contactId=...</code>
+          </div>
         </div>
       </section>
 
+      {/* Divider */}
+      <div className="landing-divider" />
+
+      {/* Features */}
       <section className="landing-features">
         <div className="landing-feature-card">
-          <div className="landing-feature-icon">⚡</div>
+          <div className="landing-feature-num">01</div>
           <h3>Zero configuração manual</h3>
-          <p>Cole o token, o sistema busca painéis, etapas, profissionais e categorias automaticamente.</p>
+          <p>Cole o token e o sistema busca painéis, etapas, profissionais e categorias automaticamente.</p>
+          <div className="landing-feature-bar" />
         </div>
         <div className="landing-feature-card">
-          <div className="landing-feature-icon">🏥</div>
-          <h3>Multi-clínica</h3>
-          <p>Um único deploy atende todas as clínicas. Cada uma identificada pelo seu slug único na URL.</p>
+          <div className="landing-feature-num">02</div>
+          <h3>Multi-clínica, um deploy</h3>
+          <p>Uma instância atende todas as clínicas. Cada uma tem seu próprio idconta na URL.</p>
+          <div className="landing-feature-bar" />
         </div>
         <div className="landing-feature-card">
-          <div className="landing-feature-icon">🔗</div>
-          <h3>Integração dupla</h3>
-          <p>Cria cards no CRM Helena e agenda diretamente na agenda do Clinicorp — simultaneamente.</p>
+          <div className="landing-feature-num">03</div>
+          <h3>Integração dupla nativa</h3>
+          <p>Helena CRM e Clinicorp em sincronia — card e agendamento criados num único submit.</p>
+          <div className="landing-feature-bar" />
         </div>
       </section>
 
+      {/* How it works */}
       <section className="landing-how">
-        <h2 className="landing-section-title">Como funciona</h2>
+        <div className="landing-how-label">Como funciona</div>
         <div className="landing-steps">
-          <div className="landing-step">
-            <div className="landing-step-num">1</div>
-            <div>
-              <strong>Operador abre o botão</strong>
-              <p>A partir de uma conversa no WhatsApp, com o contactId na URL.</p>
+          {[
+            { n: '01', title: 'Operador abre o botão', desc: 'A partir de uma conversa no WhatsApp, o link chega com contactId e idconta da clínica.' },
+            { n: '02', title: 'Seleciona a etapa', desc: 'Dropdown dinâmico com todas as etapas do funil CRM carregadas do banco.' },
+            { n: '03', title: 'Escolhe o horário', desc: 'Se a etapa for "Agendado", o calendário do Clinicorp abre com horários disponíveis.' },
+            { n: '04', title: 'Tudo salvo', desc: 'Card criado ou movido no Helena + agendamento confirmado no Clinicorp.' },
+          ].map(s => (
+            <div key={s.n} className="landing-step">
+              <span className="landing-step-num">{s.n}</span>
+              <div className="landing-step-content">
+                <strong>{s.title}</strong>
+                <p>{s.desc}</p>
+              </div>
             </div>
-          </div>
-          <div className="landing-step-divider" />
-          <div className="landing-step">
-            <div className="landing-step-num">2</div>
-            <div>
-              <strong>Seleciona a etapa de destino</strong>
-              <p>Dropdown com todas as etapas do funil CRM da clínica.</p>
-            </div>
-          </div>
-          <div className="landing-step-divider" />
-          <div className="landing-step">
-            <div className="landing-step-num">3</div>
-            <div>
-              <strong>Escolhe o horário (se Agendado)</strong>
-              <p>Calendário com slots disponíveis direto do Clinicorp.</p>
-            </div>
-          </div>
-          <div className="landing-step-divider" />
-          <div className="landing-step">
-            <div className="landing-step-num">4</div>
-            <div>
-              <strong>Tudo salvo automaticamente</strong>
-              <p>Card criado/movido no CRM + agendamento criado no Clinicorp.</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="landing-footer">
-        <p>© 2026 contactIA · Schedule Button</p>
-        <button
-          className="landing-lock-trigger"
-          onClick={handleLockClick}
-          title="Admin"
-          aria-label="Admin access"
-        >
-          ⚙
+        <span>© 2026 contactIA</span>
+        <button className="landing-footer-admin" onClick={onUnlock}>
+          Painel Admin →
         </button>
       </footer>
+
     </div>
   )
 }

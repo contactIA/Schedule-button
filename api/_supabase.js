@@ -9,18 +9,29 @@ function getSupabase() {
   return _client
 }
 
-// Busca config completa da clínica pelo helena_account_id (vem do ?idconta= na URL)
+// Busca config completa da clínica pelo helena_account_id (vem do ?idconta= na URL).
+// Consulta a tabela clinics diretamente (não usa a view clinic_config que pode estar desatualizada).
 export async function getClinicByAccountId(idconta) {
   const sb = getSupabase()
-  const { data, error } = await sb
-    .from('clinic_config')
+
+  const { data: clinic, error } = await sb
+    .from('clinics')
     .select('*')
     .eq('helena_account_id', idconta)
+    .eq('active', true)
     .maybeSingle()
 
   if (error) throw new Error(`Erro ao consultar banco: ${error.message}`)
-  if (!data) return null  // não cadastrada — frontend mostra tela de "contate o admin"
-  return data
+  if (!clinic) return null
+
+  // Busca profissionais separadamente
+  const { data: professionals } = await sb
+    .from('professionals')
+    .select('clinicorp_id, name, is_evaluator')
+    .eq('clinic_id', clinic.id)
+    .eq('active', true)
+
+  return { ...clinic, professionals: professionals ?? [] }
 }
 
 export { getSupabase }
