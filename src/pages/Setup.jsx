@@ -212,7 +212,7 @@ function AdminForm({ onSuccess }) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, subscriberId }),
+        body: JSON.stringify({ clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
@@ -375,22 +375,21 @@ function AdminForm({ onSuccess }) {
             </div>
 
             <div className="admin-field">
-              <label>CNPJ da clínica (subscriber_id) *</label>
+              <label>Subscriber ID <span style={{fontWeight:400, color:'#94a3b8'}}>(opcional)</span></label>
               <input
                 type="text"
                 value={subscriberId}
-                onChange={e => setSubscriberId(e.target.value.replace(/\D/g, ''))}
-                placeholder="Ex: 43945422000142"
-                required
-                maxLength={14}
+                onChange={e => setSubscriberId(e.target.value.trim())}
+                placeholder={clinicorpUser || 'Deixe em branco para usar o usuário da API'}
               />
-              <span className="admin-field-hint">Apenas números, sem pontuação.</span>
+              <span className="admin-field-hint">
+                Geralmente igual ao usuário da API. Preencha apenas se diferente (ex: CNPJ sem pontuação).
+              </span>
             </div>
 
             <div className="admin-info-box">
               <strong>O que será buscado automaticamente:</strong>
               <ul>
-                <li>CNPJ (subscriber_id)</li>
                 <li>Unidades da clínica</li>
                 <li>Profissionais e avaliadores</li>
                 <li>Categorias de agendamento</li>

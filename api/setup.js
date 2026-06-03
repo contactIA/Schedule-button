@@ -94,9 +94,11 @@ async function fetchClinicorpConfig(user, token, subscriberId) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, subscriberId, helenaAccountId } = req.body ?? {}
+  const { clinicName, slug, helenaToken, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
+  // subscriberId pode ser CNPJ ou o próprio usuário da API — fallback para o usuário
+  const subscriberId = (req.body?.subscriberId || clinicorpUser || '').trim()
 
-  if (!clinicName || !slug || !helenaToken || !clinicorpUser || !clinicorpToken || !subscriberId) {
+  if (!clinicName || !slug || !helenaToken || !clinicorpUser || !clinicorpToken) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' })
   }
 
