@@ -125,8 +125,8 @@ export default async function handler(req, res) {
       fromTime: fromTime,
       toTime: toTime,
       Notes: notes || 'Agendamento via Prime Agendamento',
-      CategoryColor: '#FF5733',
-      CategoryDescription: 'Avaliação',
+      CategoryColor: '#ffff00',
+      CategoryDescription: 'AVALIAÇÃO',
     }
 
     console.log('[Clinicorp POST] payload:', JSON.stringify(payload))

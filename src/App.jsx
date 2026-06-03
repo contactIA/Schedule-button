@@ -1,22 +1,11 @@
 import { useState, useEffect } from 'react'
-import {
-  createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, addContactTags, scheduleClinicorp, fetchClinicorpSlots
-} from './api'
-import { STEPS, STEP_NAMES, TAGS, TAG_LIST, CLINICORP_PROFESSIONALS } from './config'
+import { createCard, getContact, findCardByContact, updateCardStep, addCardNote, addContactTags } from './services/helena'
+import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
+import { STEPS, STEP_NAMES, TAGS, CLINICORP_PROFESSIONALS } from './config'
+import Calendar from './components/Calendar'
+import SlotPicker from './components/SlotPicker'
+import TagChips from './components/TagChips'
 import './App.css'
-
-const WEEKDAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB']
-const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-
-function buildCalendarDays(year, month) {
-  const firstDay = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const days = []
-  for (let i = 0; i < firstDay; i++) days.push(null)
-  for (let d = 1; d <= daysInMonth; d++) days.push(d)
-  return days
-}
 
 function toDateStr(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -30,6 +19,15 @@ function isPhonePrivate(phone) {
   const digits = str.replace(/\D/g, '')
   if (digits.length < 10) return true
   return false
+}
+
+// Remove o DDI +55 que a API Helena retorna junto com o número
+function stripCountryCode(phone) {
+  if (!phone) return ''
+  const digits = String(phone).replace(/\D/g, '')
+  if (digits.length === 13 && digits.startsWith('55')) return digits.slice(2)
+  if (digits.length === 12 && digits.startsWith('55')) return digits.slice(2)
+  return digits
 }
 
 function App() {
@@ -74,7 +72,7 @@ function App() {
         const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
         const priv = isPhonePrivate(phone)
         setPhonePrivate(priv)
-        if (!priv) setTelefone(phone)
+        if (!priv) setTelefone(stripCountryCode(phone))
         return findCardByContact(cid, data?.name)
       })
       .then(card => { if (card) setExistingCard(card) })
@@ -205,11 +203,6 @@ function App() {
     }
   }
 
-  const calendarDays = buildCalendarDays(viewYear, viewMonth)
-  const selectedProf = selectedSlot
-    ? CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId)
-    : null
-
   const phoneInvalid = phonePrivate && !telefone.trim()
 
   return (
@@ -313,24 +306,7 @@ function App() {
 
                   <div className="form-group">
                     <label>Etiquetas do Contato</label>
-                    <div className="tag-chips">
-                      {TAG_LIST.map(tag => (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          className={[
-                            'tag-chip',
-                            tagIds.has(tag.id) ? 'tag-chip-active' : '',
-                            tag.locked ? 'tag-chip-locked' : '',
-                          ].filter(Boolean).join(' ')}
-                          onClick={() => toggleTag(tag.id)}
-                          title={tag.locked ? 'Etiqueta sempre aplicada' : undefined}
-                        >
-                          {tagIds.has(tag.id) && <span className="tag-chip-check">✓</span>}
-                          {tag.label}
-                        </button>
-                      ))}
-                    </div>
+                    <TagChips tagIds={tagIds} onToggle={toggleTag} />
                   </div>
 
                   <div className="form-group">
@@ -385,78 +361,26 @@ function App() {
               </div>
 
               <div className="calendar-wrap">
-                <div className="calendar">
-                  <div className="cal-header">
-                    <button type="button" className="cal-nav" onClick={prevMonth}>&#8249;</button>
-                    <div className="cal-month-label">
-                      <span>{MONTHS[viewMonth].toUpperCase()}</span>
-                      <span className="cal-year">{viewYear}</span>
-                    </div>
-                    <button type="button" className="cal-nav" onClick={nextMonth}>&#8250;</button>
-                  </div>
-
-                  <div className="cal-grid">
-                    {WEEKDAYS.map(w => (
-                      <div key={w} className="cal-weekday">{w}</div>
-                    ))}
-                    {calendarDays.map((day, i) => {
-                      if (!day) return <div key={`e-${i}`} className="cal-empty" />
-                      const dateStr = toDateStr(viewYear, viewMonth, day)
-                      const isPast = dateStr < todayStr
-                      const isToday = dateStr === todayStr
-                      const isSelected = dateStr === selectedDate
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          disabled={isPast}
-                          className={[
-                            'cal-day',
-                            isPast ? 'cal-day-past' : '',
-                            isToday && !isSelected ? 'cal-day-today' : '',
-                            isSelected ? 'cal-day-selected' : '',
-                          ].filter(Boolean).join(' ')}
-                          onClick={() => handleDayClick(day)}
-                        >
-                          {day}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                <Calendar
+                  viewYear={viewYear}
+                  viewMonth={viewMonth}
+                  selectedDate={selectedDate}
+                  todayStr={todayStr}
+                  onDayClick={handleDayClick}
+                  onPrevMonth={prevMonth}
+                  onNextMonth={nextMonth}
+                />
 
                 {selectedDate && (
                   <div className="slots-section">
                     <div className="slots-header">Horários disponíveis</div>
-                    {slotsLoading && (
-                      <div className="slots-loading-row">
-                        <span className="spinner spinner-dark" />
-                        Buscando horários...
-                      </div>
-                    )}
-                    {slotsError && <p className="slots-msg slots-msg-error">⚠ {slotsError}</p>}
-                    {!slotsLoading && !slotsError && availableSlots.length === 0 && (
-                      <p className="slots-msg">Nenhum horário disponível para esta data.</p>
-                    )}
-                    {!slotsLoading && availableSlots.length > 0 && (
-                      <div className="slots-list">
-                        {availableSlots.map((slot, i) => {
-                          const prof = CLINICORP_PROFESSIONALS.find(p => p.id === slot.professionalId)
-                          const isActive = selectedSlot?.from === slot.from && selectedSlot?.professionalId === slot.professionalId
-                          return (
-                            <button
-                              key={`${slot.from}-${slot.professionalId}-${i}`}
-                              type="button"
-                              className={`slot-row${isActive ? ' slot-row-active' : ''}`}
-                              onClick={() => setSelectedSlot(isActive ? null : slot)}
-                            >
-                              <span className="slot-row-time">{slot.from} às {slot.to}</span>
-                              {prof && <span className="slot-row-prof">{prof.name.split(' ')[0]}</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                    <SlotPicker
+                      loading={slotsLoading}
+                      error={slotsError}
+                      slots={availableSlots}
+                      selectedSlot={selectedSlot}
+                      onSelectSlot={setSelectedSlot}
+                    />
                   </div>
                 )}
               </div>
@@ -464,7 +388,9 @@ function App() {
               {selectedSlot && (
                 <div className="slot-summary">
                   ✓ {selectedDate} às {selectedSlot.from}
-                  {selectedProf ? ` · ${selectedProf.name.split(' ')[0]}` : ''}
+                  {CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId)?.name.split(' ')[0]
+                    ? ` · ${CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId).name.split(' ')[0]}`
+                    : ''}
                 </div>
               )}
 
