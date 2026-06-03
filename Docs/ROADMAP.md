@@ -1,83 +1,95 @@
-# Roadmap — Prime Agendamento
+# Roadmap — Schedule Button
 
 Iniciativas planejadas, organizadas por prioridade. Atualizado em: 2026-06-03.
 
 ---
 
-## Prioridade Alta — Segurança e Estabilidade
+## Prioridade Alta — Fundação multi-tenant
 
-### 1. Mover credenciais para variáveis de ambiente
-**Problema:** TOKEN Helena, AUTH Clinicorp, SUBSCRIBER_ID e BUSINESS_ID estão hardcoded no código-fonte e expostos no git.
-**Solução:** Migrar para variáveis de ambiente (`.env.local` em dev, Vercel Env Vars em produção).
-**Impacto:** Elimina risco de vazamento de credenciais.
-**Arquivos:** `src/config.js`, `api/clinicorp.js`
-**Esforço estimado:** 2-3h
+### 1. Integração com Supabase (banco de dados)
+**Objetivo:** Tornar o projeto multi-tenant — uma instância atende múltiplas clínicas.
+**Entregáveis:**
+- Criar projeto Supabase e schema (tabelas `clinics` e `professionals`)
+- Handler Vercel passa a buscar config da clínica pelo `?clinic=slug` na URL
+- `api/clinicorp.js` e `api/proxy.js` param de usar credenciais hardcoded
+- Variáveis de ambiente: `SUPABASE_URL` e `SUPABASE_SERVICE_KEY`
 
----
-
-### 2. Profissionais dinâmicos (sem hardcode)
-**Problema:** Os 4 dentistas estão hardcoded em `src/config.js`. Adicionar ou remover um profissional exige alteração no código e redeploy.
-**Solução:** Chamar `GET /professional/list_all_professionals?subscriber_id=...&fromOnlineScheduling=true` ao carregar o app e armazenar em estado/cache local.
-**Impacto:** Operacional — nunca mais precisar de deploy para mudança de equipe.
-**Arquivos:** `src/config.js`, `api/clinicorp.js`, `src/services/clinicorp.js`
-**Esforço estimado:** 3-4h
+**Referência:** `Docs/ARCHITECTURE.md` — seções 1, 4 e 5
 
 ---
 
-## Prioridade Média — Novas Funcionalidades
+### 2. Painel de onboarding (`/setup`)
+**Objetivo:** Cadastrar uma nova clínica em ~5 minutos com 3 inputs, sem intervenção de dev.
+**Entregáveis:**
+- Tela `/setup` com campo para Token Helena
+  - Auto-fetch de painéis, etapas e etiquetas
+  - Dropdowns para seleção
+- Campo para Usuário + Token Clinicorp
+  - Auto-fetch de unidades, profissionais e categorias
+  - Checkbox para marcar dentistas avaliadores
+- Geração de slug e salvamento no Supabase
+- Exibição da URL final gerada
 
-### 3. Confirmação automática por WhatsApp
-**Problema:** Após criar o agendamento, o operador precisa manualmente enviar mensagem de confirmação ao paciente.
-**Solução:** Após submit bem-sucedido, disparar mensagem via `POST /chat/send/texto` da API Helena com data, hora e nome do dentista confirmados.
-**Impacto:** Reduz trabalho manual do operador e melhora experiência do paciente.
-**Arquivos:** `src/services/helena.js`, `src/App.jsx`
+**Referência:** `Docs/ARCHITECTURE.md` — seção 2
+
+---
+
+### 3. Seletor de dentista no step 2
+**Objetivo:** Clínicas com múltiplos dentistas avaliadores podem filtrar horários por profissional.
+**Entregáveis:**
+- Seletor integrado ao topo do calendário (sem etapa extra)
+- Opção "Qualquer disponível" (mostra todos os slots)
+- Para clínicas com 1 dentista: seletor oculto automaticamente
+- Slots filtrados pelo dentista selecionado
+
+**Referência:** `Docs/ARCHITECTURE.md` — seção 3
+
+---
+
+## Prioridade Média — Novas funcionalidades
+
+### 4. Confirmação automática por WhatsApp
+**Objetivo:** Após criar o agendamento, disparar mensagem de confirmação ao paciente via Helena.
+**Entregáveis:**
+- Após submit bem-sucedido, chamar `POST /chat/send/texto` da API Helena
+- Mensagem com data, hora e nome do dentista
+- Configurável por clínica (template de mensagem no painel admin)
+
 **Referência:** `Docs/Documentação API Helena/Chat/Send/texto.md`
-**Esforço estimado:** 4-6h
-
----
-
-### 4. Categorias de agendamento selecionáveis
-**Problema:** Todos os agendamentos criados usam a mesma categoria (`AVALIAÇÃO`), independente do tipo de consulta.
-**Solução:** Buscar `GET /appointment/list_categories` ao abrir o step 2 e exibir um seletor para o operador escolher o tipo de consulta.
-**Impacto:** Melhora a organização da agenda do Clinicorp, facilita triagem.
-**Arquivos:** `api/clinicorp.js`, `src/services/clinicorp.js`, `src/App.jsx`
-**Esforço estimado:** 3-4h
 
 ---
 
 ### 5. Dias disponíveis marcados no calendário
-**Problema:** O operador seleciona qualquer data e só descobre que não há horários depois que a API retorna vazio.
-**Solução:** Ao abrir o step 2, buscar `GET /appointment/get_avaliable_days` para o mês atual e desabilitar visualmente os dias sem disponibilidade.
-**Impacto:** Reduz frustração do operador, evita cliques desnecessários.
-**Arquivos:** `api/clinicorp.js`, `src/services/clinicorp.js`, `src/components/Calendar.jsx`
-**Esforço estimado:** 4-5h
+**Objetivo:** Desabilitar visualmente dias sem horários antes do operador clicar.
+**Entregáveis:**
+- Ao abrir o step 2, buscar `GET /appointment/get_avaliable_days` para o mês corrente
+- Dias sem disponibilidade aparecem desabilitados no calendário
 
 ---
 
-## Prioridade Baixa — Qualidade e Alcance
+## Prioridade Baixa — Qualidade e alcance
 
 ### 6. Busca manual de contato por telefone
-**Problema:** A tela só funciona quando aberta com `?contactId=...`. Se aberta diretamente, o operador precisa preencher tudo manualmente e o card não fica vinculado ao contato.
-**Solução:** Adicionar campo de busca por telefone usando `GET /core/v1/contact?phoneNumber=...` da API Helena como fallback quando não há `contactId` na URL.
-**Impacto:** Permite uso da ferramenta em mais cenários (ex: ligações inbound).
-**Arquivos:** `src/App.jsx`, `src/services/helena.js`
-**Esforço estimado:** 4-6h
+**Objetivo:** Permitir uso sem `?contactId=` na URL (ex: ligações inbound).
+**Entregáveis:**
+- Campo de busca por telefone quando não há `contactId` na URL
+- `GET /core/v1/contact?phoneNumber=...` da Helena
 
 ---
 
 ### 7. Histórico de agendamentos do paciente
-**Problema:** O operador não sabe se o paciente já teve agendamentos anteriores ao criar o card.
-**Solução:** Após encontrar o paciente no Clinicorp, buscar `GET /appointment/list?patientId=...` e exibir um resumo dos últimos agendamentos.
-**Impacto:** Melhora contexto para o operador durante o atendimento.
-**Arquivos:** `api/clinicorp.js`, `src/services/clinicorp.js`, `src/App.jsx`
-**Esforço estimado:** 5-7h
+**Objetivo:** Mostrar agendamentos anteriores do paciente ao operador.
+**Entregáveis:**
+- Após encontrar o paciente no Clinicorp, buscar `GET /appointment/list?patientId=...`
+- Resumo compacto visível no formulário
 
 ---
 
-## Débitos Técnicos
+## Débitos técnicos
 
-| Item | Arquivo | Gravidade |
-|---|---|---|
-| 2 warnings de lint (`setState` em `useEffect`) | `src/App.jsx` | Baixa (não afeta comportamento) |
-| `date` enviado como `T03:00:00.000Z` (fuso hardcoded) | `api/clinicorp.js:122` | Média (pode errar 1 dia fora do fuso BR) |
-| Token Helena exposto no bundle JS do frontend | `src/config.js` | Alta (ver item #1 acima) |
+| Item | Arquivo | Gravidade | Status |
+|---|---|---|---|
+| Credenciais hardcoded | `src/config.js`, `api/clinicorp.js` | Alta | Resolvido pelo item #1 acima |
+| Profissionais hardcoded | `src/config.js` | Alta | Resolvido pelos itens #1 e #2 acima |
+| 2 warnings de lint (setState em useEffect) | `src/App.jsx` | Baixa | Pendente |
+| `date` com offset `T03:00:00.000Z` hardcoded | `api/clinicorp.js` | Média | Pendente |
