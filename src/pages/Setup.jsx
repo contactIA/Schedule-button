@@ -479,23 +479,18 @@ function Success({ data, onNew }) {
 
 // ── Root ──────────────────────────────────────────────────────────
 export default function Setup() {
-  const [state, setState] = useState('landing') // landing | password | form | success
+  const [state, setState] = useState('password') // password | form | success
   const [successData, setSuccessData] = useState(null)
 
   return (
     <div className="setup-root">
-      {state === 'landing' && (
-        <Landing onUnlock={() => setState('password')} />
-      )}
-
       {state === 'password' && (
-        <>
-          <Landing onUnlock={() => {}} />
+        <div className="setup-password-bg">
           <PasswordModal
             onSuccess={() => setState('form')}
-            onCancel={() => setState('landing')}
+            onCancel={() => window.history.back()}
           />
-        </>
+        </div>
       )}
 
       {state === 'form' && (
