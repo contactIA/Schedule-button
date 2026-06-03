@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { createCard, getContact, findCardByContact, updateCardStep, addCardNote, addContactTags } from './services/helena'
+import { createCard, getContact, findCardByContact, updateCardStep, addCardNote, addContactTags, getPanelSteps } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
-import { STEPS, STEP_NAMES, TAGS, CLINICORP_PROFESSIONALS } from './config'
+import { TAGS, AGENDADO_STEP_NAME, CLINICORP_PROFESSIONALS } from './config'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
@@ -31,21 +31,25 @@ function App() {
   const today = new Date()
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
 
-  const [step, setStep] = useState(1)
+  const [uiStep, setUiStep] = useState(1)
 
   // Dados do paciente
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
   const [phonePrivate, setPhonePrivate] = useState(false)
   const [descricao, setDescricao] = useState('')
-  const [origem, setOrigem] = useState('crcA')
   const [tagIds, setTagIds] = useState(new Set([TAGS.Agendado]))
+
+  // Etapas do painel CRC
+  const [steps, setSteps] = useState([])
+  const [stepsLoading, setStepsLoading] = useState(true)
+  const [selectedStepId, setSelectedStepId] = useState('')
 
   // Contato / card
   const [contactId, setContactId] = useState(null)
   const [existingCard, setExistingCard] = useState(null)
 
-  // Calendário
+  // Calendário (só usado quando etapa selecionada é "Agendado")
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState(null)
@@ -58,24 +62,45 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
+  // A etapa selecionada é a etapa "Agendado" quando o nome faz match
+  const isAgendadoStep = selectedStepId
+    ? (steps.find(s => s.id === selectedStepId)?.name ?? '').toLowerCase().includes(AGENDADO_STEP_NAME)
+    : false
+
+  // Carrega etapas do painel e dados do contato em paralelo
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const cid = params.get('contactid') || params.get('contactId')
-    if (!cid) return
-    setContactId(cid)
-    getContact(cid)
+
+    const loadSteps = getPanelSteps()
       .then(data => {
-        if (data?.name) setNome(data.name)
-        const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
-        const priv = isPhonePrivate(phone)
-        setPhonePrivate(priv)
-        if (!priv) setTelefone(stripCountryCode(phone))
-        return findCardByContact(cid, data?.name)
+        setSteps(data)
+        if (data.length > 0) setSelectedStepId(data[0].id)
       })
-      .then(card => { if (card) setExistingCard(card) })
-      .catch(err => console.warn('Erro ao carregar dados:', err))
+      .catch(err => console.warn('Erro ao carregar etapas:', err))
+      .finally(() => setStepsLoading(false))
+
+    if (!cid) return void loadSteps
+
+    setContactId(cid)
+    Promise.all([
+      loadSteps,
+      getContact(cid)
+        .then(data => {
+          if (data?.name) setNome(data.name)
+          const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
+          const priv = isPhonePrivate(phone)
+          setPhonePrivate(priv)
+          if (!priv) setTelefone(stripCountryCode(phone))
+        })
+        .catch(err => console.warn('Erro ao carregar contato:', err)),
+      findCardByContact(cid)
+        .then(card => { if (card) setExistingCard(card) })
+        .catch(() => null),
+    ])
   }, [])
 
+  // Busca slots ao selecionar uma data
   useEffect(() => {
     if (!selectedDate) return
     setSlotsLoading(true)
@@ -118,46 +143,48 @@ function App() {
     e.preventDefault()
     if (!nome.trim()) return
     if (phonePrivate && !telefone.trim()) return
-    setStep(2)
+    // Se a etapa selecionada é "Agendado", abre o calendário; senão, submete direto
+    if (isAgendadoStep) {
+      setUiStep(2)
+    } else {
+      handleSubmit()
+    }
   }
 
   const handleSubmit = async (e) => {
-    e && e.preventDefault && e.preventDefault()
+    e?.preventDefault?.()
     if (!nome.trim()) return
     setLoading(true)
     setMessage(null)
 
     try {
-      const stepId = STEPS[origem]
-      let extraInfo = []
-      if (selectedDate && selectedSlot) {
-        extraInfo.push(`Agendamento: ${selectedDate} às ${selectedSlot.from}`)
-      }
+      const selectedStep = steps.find(s => s.id === selectedStepId)
+      const stepName = selectedStep?.name ?? 'etapa selecionada'
+
       let finalDescription = descricao.trim()
-      if (extraInfo.length > 0) {
-        finalDescription = extraInfo.join('\n') + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
+      if (selectedDate && selectedSlot) {
+        const agendamentoLine = `Agendamento: ${selectedDate} às ${selectedSlot.from}`
+        finalDescription = agendamentoLine + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
       }
 
-      let card = existingCard
-      if (!card && contactId) {
-        card = await findCardByContact(contactId, nome.trim()).catch(() => null)
-      }
-
+      // Busca card em todos os painéis, depois cria ou move
+      const card = await findCardByContact(contactId).catch(() => null)
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
 
       if (card) {
-        await updateCardStep(card.id, stepId, dueDateTime)
+        await updateCardStep(card.id, selectedStepId, dueDateTime)
         if (finalDescription) await addCardNote(card.id, finalDescription)
       } else {
-        await createCard(stepId, nome.trim(), finalDescription, contactId, dueDateTime)
+        await createCard(selectedStepId, nome.trim(), finalDescription, contactId, dueDateTime)
       }
 
       if (contactId && tagIds.size > 0) {
         await addContactTags(contactId, Array.from(tagIds))
       }
 
+      // Agenda no Clinicorp só se a etapa for "Agendado" e um slot foi selecionado
       let clinicorpStatus = null
-      if (selectedDate && selectedSlot) {
+      if (isAgendadoStep && selectedDate && selectedSlot) {
         try {
           await scheduleClinicorp({
             patientName: nome.trim(),
@@ -166,7 +193,7 @@ function App() {
             dateLocal: selectedDate,
             fromTime: selectedSlot.from,
             toTime: selectedSlot.to,
-            notes: finalDescription || 'Agendamento via Prime Agendamento',
+            notes: finalDescription || 'Agendamento via Schedule Button',
           })
           clinicorpStatus = 'ok'
         } catch (err) {
@@ -174,25 +201,28 @@ function App() {
         }
       }
 
-      const baseText = card ? 'Card atualizado com sucesso!' : 'Card criado com sucesso!'
+      const baseText = card
+        ? `Card movido para "${stepName}" com sucesso!`
+        : `Card criado em "${stepName}" com sucesso!`
+
       if (clinicorpStatus === 'ok') {
         setMessage({ type: 'success', text: baseText + ' Agendamento no Clinicorp confirmado.' })
       } else if (clinicorpStatus) {
-        setMessage({ type: 'error', text: `${baseText}\n\nErro no Clinicorp: ${clinicorpStatus}\n\nVerifique o console do navegador (F12) para mais detalhes.` })
+        setMessage({ type: 'error', text: `${baseText}\n\nErro no Clinicorp: ${clinicorpStatus}` })
       } else {
         setMessage({ type: 'success', text: baseText })
       }
 
-      setStep(1)
+      // Reset do formulário
+      setUiStep(1)
       setSelectedDate(null)
       setSelectedSlot(null)
       setAvailableSlots([])
       setDescricao('')
-      setOrigem('crcA')
       setTagIds(new Set([TAGS.Agendado]))
       setExistingCard(null)
-      const timeout = clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000
-      setTimeout(() => setMessage(null), timeout)
+      if (steps.length > 0) setSelectedStepId(steps[0].id)
+      setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
@@ -206,9 +236,9 @@ function App() {
     <div className="page">
       <header className="header">
         <div className="brand">
-          <div className="brand-mark"><span className="brand-initials">P</span></div>
+          <div className="brand-mark"><span className="brand-initials">S</span></div>
           <div className="brand-text">
-            <h1 className="brand-name">Prime Agendamento</h1>
+            <h1 className="brand-name">Schedule Button</h1>
             <p className="brand-sub">Criação Rápida de Cards no CRM</p>
           </div>
         </div>
@@ -217,7 +247,6 @@ function App() {
       <main className="main">
         <div className="form-container">
 
-          {/* Alert */}
           {message && (
             <div className={`alert alert-${message.type}`}>
               {message.type === 'success' ? (
@@ -235,34 +264,27 @@ function App() {
           )}
 
           {/* ── ETAPA 1: Formulário ── */}
-          {step === 1 && (
+          {uiStep === 1 && (
             <div className="step-content">
               <div className="form-header">
-                <h3>{existingCard ? 'Atualizar Agendamento' : 'Novo Agendamento'}</h3>
+                <h3>{existingCard ? 'Mover Card' : 'Novo Card'}</h3>
                 <p>
                   {existingCard
-                    ? 'Card encontrado — será movido para a nova etapa.'
+                    ? 'Card encontrado — será movido para a etapa selecionada.'
                     : 'Preencha os dados para criar o card no CRM.'}
                 </p>
-                {existingCard && (
+                {existingCard?.title && (
                   <div className="card-preview">
                     <div className="card-preview-row">
-                      <span className="card-preview-label">Etapa atual</span>
-                      <span className="card-preview-value">{STEP_NAMES[existingCard.stepId] || 'Outra etapa'}</span>
+                      <span className="card-preview-label">Card encontrado</span>
+                      <span className="card-preview-value">{existingCard.title}</span>
                     </div>
-                    {existingCard.title && (
-                      <div className="card-preview-row">
-                        <span className="card-preview-label">Título</span>
-                        <span className="card-preview-value">{existingCard.title}</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
 
               <form className="card-form" onSubmit={handleNext}>
 
-                {/* Seção: Dados do paciente */}
                 <div className="form-section">
                   <span className="form-section-label">Dados do Paciente</span>
 
@@ -297,9 +319,31 @@ function App() {
                   </div>
                 </div>
 
-                {/* Seção: Card no CRM */}
                 <div className="form-section">
                   <span className="form-section-label">Card no CRM</span>
+
+                  <div className="form-group">
+                    <label>Etapa de destino *</label>
+                    {stepsLoading ? (
+                      <div className="steps-loading">
+                        <span className="spinner spinner-dark" /> Carregando etapas...
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedStepId}
+                        onChange={(e) => setSelectedStepId(e.target.value)}
+                        className="step-select"
+                        required
+                      >
+                        {steps.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {isAgendadoStep && (
+                      <span className="field-hint">Calendário do Clinicorp será aberto no próximo passo.</span>
+                    )}
+                  </div>
 
                   <div className="form-group">
                     <label>Etiquetas do Contato</label>
@@ -315,42 +359,27 @@ function App() {
                       rows="3"
                     />
                   </div>
-
-                  <div className="form-group">
-                    <label>Origem do Agendamento</label>
-                    <div className="segmented-control">
-                      {['crcA', 'crcB'].map(key => (
-                        <label key={key} className={`segment ${origem === key ? 'active' : ''}`}>
-                          <input
-                            type="radio"
-                            name="origem"
-                            value={key}
-                            checked={origem === key}
-                            onChange={(e) => setOrigem(e.target.value)}
-                            className="sr-only"
-                          />
-                          <span className="segment-text">{key === 'crcA' ? 'CRC A' : 'CRC B'}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="form-actions">
                   <button
                     type="submit"
                     className="btn-primary"
-                    disabled={!nome.trim() || phoneInvalid}
+                    disabled={!nome.trim() || phoneInvalid || stepsLoading || !selectedStepId || loading}
                   >
-                    Próximo: Escolher Horário →
+                    {loading
+                      ? <span className="btn-loading"><span className="spinner" />Salvando...</span>
+                      : isAgendadoStep
+                        ? 'Próximo: Escolher Horário →'
+                        : existingCard ? 'Mover Card' : 'Criar Card'}
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* ── ETAPA 2: Calendário ── */}
-          {step === 2 && (
+          {/* ── ETAPA 2: Calendário (só quando etapa é Agendado) ── */}
+          {uiStep === 2 && (
             <div className="step-content">
               <div className="form-header">
                 <h3>Escolha o melhor horário</h3>
@@ -393,7 +422,7 @@ function App() {
               })()}
 
               <div className="step2-actions">
-                <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
+                <button type="button" className="btn-secondary" onClick={() => setUiStep(1)}>
                   ← Voltar
                 </button>
                 <button
@@ -405,8 +434,8 @@ function App() {
                   {loading
                     ? <span className="btn-loading"><span className="spinner" />Salvando...</span>
                     : selectedSlot
-                      ? (existingCard ? 'Atualizar Card' : 'Criar Card')
-                      : 'Criar Card sem Horário'}
+                      ? (existingCard ? 'Mover Card + Agendar' : 'Criar Card + Agendar')
+                      : existingCard ? 'Mover Card sem Horário' : 'Criar Card sem Horário'}
                 </button>
               </div>
             </div>

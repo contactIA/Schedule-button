@@ -20,8 +20,9 @@ export async function getContact(contactId) {
   return res.json()
 }
 
+// Busca sem filtro de PanelId para encontrar o card em qualquer painel do workspace.
 export async function findCardByContact(contactId) {
-  const qs = new URLSearchParams({ PanelId: PANEL_ID, ContactId: contactId, PageSize: 1, PageNumber: 1 })
+  const qs = new URLSearchParams({ ContactId: contactId, PageSize: 1, PageNumber: 1 })
   const res = await proxyFetch(`/crm/v1/panel/card?${qs}`, {
     headers: { Authorization: TOKEN }
   })
@@ -30,6 +31,20 @@ export async function findCardByContact(contactId) {
     if (json.items && json.items.length > 0) return json.items[0]
   }
   return null
+}
+
+// Retorna as etapas do painel CRC para popular o dropdown de destino.
+export async function getPanelSteps() {
+  const res = await proxyFetch(`/crm/v1/panel/${PANEL_ID}`, {
+    headers: { Authorization: TOKEN }
+  })
+  if (!res.ok) throw new Error('Erro ao buscar etapas do painel')
+  const json = await res.json()
+  // A API pode retornar steps em json.steps ou json.columns dependendo da versão
+  const steps = json.steps ?? json.columns ?? []
+  return steps
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map(s => ({ id: s.id, name: s.name ?? s.title ?? '' }))
 }
 
 export async function updateCardStep(cardId, stepId, dueDate = null) {

@@ -1,15 +1,9 @@
 export const TOKEN = 'Bearer pn_22zvaOtn9H6mmwNKktsuKd91F8UDdLnuu085N5bw'
 export const PANEL_ID = 'fd4df083-7422-4171-9ee2-1c098e799798'
 
-export const STEPS = {
-  crcA: '884ffe20-5cdb-4549-9301-07d38dc278a1',
-  crcB: 'c86979eb-cb1f-43b4-aabf-f726a304d011',
-}
-
-export const STEP_NAMES = {
-  '884ffe20-5cdb-4549-9301-07d38dc278a1': 'CRC A',
-  'c86979eb-cb1f-43b4-aabf-f726a304d011': 'CRC B',
-}
+// Etapa cujo nome contenha este padrão aciona o calendário do Clinicorp.
+// Quando migrar para Supabase, cada clínica terá um agendado_step_id explícito.
+export const AGENDADO_STEP_NAME = 'agendado'
 
 export const TAGS = {
   Mastigação: '5c735bac-3286-45cb-95aa-bcd6e97a2ffc',
@@ -19,12 +13,11 @@ export const TAGS = {
   Agendado: '47870808-399c-45c3-b056-a2c66c8ae337'
 }
 
-// Exibição das tags na interface (rótulo + ID)
 export const TAG_LIST = [
-  { id: TAGS.Agendado,   label: 'Agendado',   locked: true  },
-  { id: TAGS.Mastigação, label: 'Mastigação',  locked: false },
-  { id: TAGS.Estética,   label: 'Estética',    locked: false },
-  { id: TAGS.Alta,       label: 'Alta Urgência', locked: false },
+  { id: TAGS.Agendado,   label: 'Agendado',      locked: true  },
+  { id: TAGS.Mastigação, label: 'Mastigação',     locked: false },
+  { id: TAGS.Estética,   label: 'Estética',       locked: false },
+  { id: TAGS.Alta,       label: 'Alta Urgência',  locked: false },
   { id: TAGS.Baixa,      label: 'Baixa Urgência', locked: false },
 ]
 
