@@ -103,11 +103,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('[setup] Iniciando para slug:', slug, '| subscriberId:', subscriberId)
+
     const [helenaConfig, clinicorpConfig, autoAccountId] = await Promise.all([
-      fetchHelenaConfig(helenaToken),
-      fetchClinicorpConfig(clinicorpUser, clinicorpToken, subscriberId),
+      fetchHelenaConfig(helenaToken).catch(e => { throw new Error(`Helena: ${e.message}`) }),
+      fetchClinicorpConfig(clinicorpUser, clinicorpToken, subscriberId).catch(e => { throw new Error(`Clinicorp: ${e.message}`) }),
       fetchHelenaAccountId(helenaToken),
     ])
+
+    console.log('[setup] Configs obtidas | panelId:', helenaConfig.panelId, '| businessId:', clinicorpConfig.businessId, '| accountId auto:', autoAccountId)
 
     // helenaAccountId manual tem prioridade sobre o auto-detectado
     const accountId = helenaAccountId?.trim() || autoAccountId
