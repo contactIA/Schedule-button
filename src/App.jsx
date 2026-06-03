@@ -41,6 +41,12 @@ function NoClinic() {
           Este link não está associado a nenhuma clínica cadastrada.
           Entre em contato com o administrador para obter o link correto.
         </p>
+        <button
+          className="no-clinic-admin-btn"
+          onClick={() => window.location.href = '/setup'}
+        >
+          Sou administrador →
+        </button>
         <span className="no-clinic-hint">contactia.com.br · Schedule Button</span>
       </div>
     </div>
