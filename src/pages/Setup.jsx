@@ -217,7 +217,13 @@ function AdminForm({ onSuccess }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
-      onSuccess({ clinicName, slug, professionalsCount: data.professionalsCount })
+      onSuccess({
+        clinicName,
+        slug,
+        professionalsCount:   data.professionalsCount,
+        helenaAccountId:      data.helenaAccountId,
+        accountAutoDetected:  data.accountAutoDetected,
+      })
     } catch (err) {
       setSubmitError(err.message)
     } finally {
@@ -413,7 +419,8 @@ function AdminForm({ onSuccess }) {
 
 // ── Success ───────────────────────────────────────────────────────
 function Success({ data, onNew }) {
-  const url = `https://app.contactia.com.br?clinic=${data.slug}&contactId=`
+  const baseUrl = window.location.origin
+  const url = `${baseUrl}?idconta=${data.helenaAccountId || data.slug}&contactId=`
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -432,15 +439,35 @@ function Success({ data, onNew }) {
           {data.professionalsCount > 0 && ` ${data.professionalsCount} profissional(is) importado(s).`}
         </p>
 
+        {data.helenaAccountId && (
+          <div className="success-url-box" style={{ borderBottom: 'none' }}>
+            <span className="success-url-label">ID da conta Helena</span>
+            <div className="success-url">
+              <code>{data.helenaAccountId}</code>
+            </div>
+            <span className="success-url-hint">
+              {data.accountAutoDetected
+                ? 'Detectado automaticamente — configure ?idconta= com este valor no botão do Helena.'
+                : 'Configure ?idconta= com este valor no botão do Helena.'}
+            </span>
+          </div>
+        )}
+
+        {!data.helenaAccountId && (
+          <div className="admin-error-box" style={{ margin: '0 28px' }}>
+            Não foi possível detectar o ID da conta Helena automaticamente. Configure o campo <strong>helena_account_id</strong> manualmente no Supabase após o cadastro.
+          </div>
+        )}
+
         <div className="success-url-box">
-          <span className="success-url-label">URL gerada</span>
+          <span className="success-url-label">URL do botão</span>
           <div className="success-url">
             <code>{url}</code>
             <button className="success-copy-btn" onClick={handleCopy}>
               {copied ? '✓ Copiado' : 'Copiar'}
             </button>
           </div>
-          <span className="success-url-hint">Adicione o contactId do contato ao final da URL.</span>
+          <span className="success-url-hint">O Helena substituirá automaticamente o contactId na URL.</span>
         </div>
 
         <button className="admin-btn-secondary success-new-btn" onClick={onNew}>

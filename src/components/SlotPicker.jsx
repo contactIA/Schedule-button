@@ -1,6 +1,4 @@
-import { CLINICORP_PROFESSIONALS } from '../config'
-
-export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot }) {
+export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, professionals = [] }) {
   if (loading) {
     return (
       <div className="slots-loading-row">
@@ -21,7 +19,7 @@ export default function SlotPicker({ loading, error, slots, selectedSlot, onSele
   return (
     <div className="slots-list">
       {slots.map((slot, i) => {
-        const prof = CLINICORP_PROFESSIONALS.find(p => p.id === slot.professionalId)
+        const prof    = professionals.find(p => p.id === slot.professionalId || p.clinicorp_id === slot.professionalId)
         const isActive = selectedSlot?.from === slot.from && selectedSlot?.professionalId === slot.professionalId
         return (
           <button

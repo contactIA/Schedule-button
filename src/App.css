@@ -7,6 +7,59 @@ body {
   color: #0f172a;
 }
 
+/* ── Tela sem clínica ── */
+.no-clinic-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f8fafc;
+}
+
+.no-clinic-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 48px 36px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(15,23,42,.06);
+}
+
+.no-clinic-icon { font-size: 48px; margin-bottom: 20px; }
+
+.no-clinic-card h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.no-clinic-card p {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.65;
+  margin-bottom: 24px;
+}
+
+.no-clinic-hint {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+/* ── Loading da clínica ── */
+.clinic-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100vh;
+  font-size: 14px;
+  color: #64748b;
+}
+
 .page {
   display: flex;
   flex-direction: column;

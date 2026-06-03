@@ -1,31 +1,26 @@
-import { TOKEN, PANEL_ID } from '../config'
-
-// Em dev, chama o proxy local do Vite. Em produção, passa pelo handler Vercel /api/proxy.
-async function proxyFetch(path, options = {}) {
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  if (isLocal) {
-    return fetch(`/api${path}`, options)
-  }
+// Todas as chamadas à API Helena passam pelo /api/proxy (Vercel Function),
+// que usa o x-idconta header para buscar o token correto no Supabase.
+async function proxyFetch(path, idconta, options = {}) {
   return fetch('/api/proxy', {
     ...options,
-    headers: { ...options.headers, 'x-target-path': path }
+    headers: {
+      ...options.headers,
+      'x-target-path': path,
+      'x-idconta':     idconta,
+    }
   })
 }
 
-export async function getContact(contactId) {
-  const res = await proxyFetch(`/core/v1/contact/${contactId}`, {
-    headers: { Authorization: TOKEN }
-  })
+export async function getContact(contactId, idconta) {
+  const res = await proxyFetch(`/core/v1/contact/${contactId}`, idconta)
   if (!res.ok) throw new Error('Contato não encontrado')
   return res.json()
 }
 
-// Busca sem filtro de PanelId para encontrar o card em qualquer painel do workspace.
-export async function findCardByContact(contactId) {
+// Busca card em todos os painéis do workspace (sem filtro PanelId)
+export async function findCardByContact(contactId, idconta) {
   const qs = new URLSearchParams({ ContactId: contactId, PageSize: 1, PageNumber: 1 })
-  const res = await proxyFetch(`/crm/v1/panel/card?${qs}`, {
-    headers: { Authorization: TOKEN }
-  })
+  const res = await proxyFetch(`/crm/v1/panel/card?${qs}`, idconta)
   if (res.ok) {
     const json = await res.json()
     if (json.items && json.items.length > 0) return json.items[0]
@@ -33,30 +28,27 @@ export async function findCardByContact(contactId) {
   return null
 }
 
-// Retorna as etapas do painel CRC para popular o dropdown de destino.
-export async function getPanelSteps() {
-  const res = await proxyFetch(`/crm/v1/panel/${PANEL_ID}`, {
-    headers: { Authorization: TOKEN }
-  })
+// Retorna as etapas do painel CRC para popular o dropdown
+export async function getPanelSteps(panelId, idconta) {
+  const res = await proxyFetch(`/crm/v1/panel/${panelId}`, idconta)
   if (!res.ok) throw new Error('Erro ao buscar etapas do painel')
   const json = await res.json()
-  // A API pode retornar steps em json.steps ou json.columns dependendo da versão
   const steps = json.steps ?? json.columns ?? []
   return steps
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map(s => ({ id: s.id, name: s.name ?? s.title ?? '' }))
 }
 
-export async function updateCardStep(cardId, stepId, dueDate = null) {
+export async function updateCardStep(cardId, stepId, idconta, dueDate = null) {
   const fields = ['stepId']
   const payload = { fields, stepId }
   if (dueDate) {
     fields.push('dueDate')
     payload.dueDate = new Date(dueDate).toISOString()
   }
-  const res = await proxyFetch(`/crm/v2/panel/card/${cardId}`, {
+  const res = await proxyFetch(`/crm/v2/panel/card/${cardId}`, idconta, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: TOKEN },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
   if (!res.ok) {
@@ -66,10 +58,10 @@ export async function updateCardStep(cardId, stepId, dueDate = null) {
   return res.json()
 }
 
-export async function addCardNote(cardId, text) {
-  const res = await proxyFetch(`/crm/v1/panel/card/${cardId}/note`, {
+export async function addCardNote(cardId, text, idconta) {
+  const res = await proxyFetch(`/crm/v1/panel/card/${cardId}/note`, idconta, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: TOKEN },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text })
   })
   if (!res.ok) {
@@ -79,14 +71,14 @@ export async function addCardNote(cardId, text) {
   return res.json()
 }
 
-export async function createCard(stepId, title, description, contactId, dueDate = null) {
-  const payload = { panelId: PANEL_ID, stepId, title, description: description || null }
+export async function createCard(stepId, panelId, title, description, contactId, idconta, dueDate = null) {
+  const payload = { panelId, stepId, title, description: description || null }
   if (contactId) payload.contactIds = [contactId]
   if (dueDate) payload.dueDate = new Date(dueDate).toISOString()
 
-  const res = await proxyFetch('/crm/v1/panel/card', {
+  const res = await proxyFetch('/crm/v1/panel/card', idconta, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: TOKEN },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
   if (!res.ok) {
@@ -99,15 +91,15 @@ export async function createCard(stepId, title, description, contactId, dueDate 
   return res.json()
 }
 
-export async function addContactTags(contactId, tagIds = []) {
+export async function addContactTags(contactId, tagIds, idconta) {
   if (!tagIds || tagIds.length === 0) return
-  const res = await proxyFetch(`/core/v1/contact/${contactId}/tags`, {
+  const res = await proxyFetch(`/core/v1/contact/${contactId}/tags`, idconta, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: TOKEN },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tagIds })
   })
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
-    console.warn(`Aviso: Falha ao adicionar etiquetas ao contato (HTTP ${res.status}): ${errText}`)
+    console.warn(`Aviso: Falha ao adicionar etiquetas (HTTP ${res.status}): ${errText}`)
   }
 }

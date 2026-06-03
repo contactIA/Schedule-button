@@ -1,9 +1,9 @@
-import { TAG_LIST } from '../config'
+export default function TagChips({ tagIds, onToggle, tagList = [] }) {
+  if (tagList.length === 0) return null
 
-export default function TagChips({ tagIds, onToggle }) {
   return (
     <div className="tag-chips">
-      {TAG_LIST.map(tag => (
+      {tagList.map(tag => (
         <button
           key={tag.id}
           type="button"

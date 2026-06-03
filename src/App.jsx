@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
-import { createCard, getContact, findCardByContact, updateCardStep, addCardNote, addContactTags, getPanelSteps } from './services/helena'
+import {
+  createCard, getContact, findCardByContact,
+  updateCardStep, addCardNote, addContactTags, getPanelSteps
+} from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
-import { TAGS, AGENDADO_STEP_NAME, CLINICORP_PROFESSIONALS } from './config'
+import { AGENDADO_STEP_NAME } from './config'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
@@ -27,87 +30,150 @@ function stripCountryCode(phone) {
   return digits
 }
 
+// ── Tela sem clínica cadastrada ───────────────────────────────────
+function NoClinic() {
+  return (
+    <div className="no-clinic-page">
+      <div className="no-clinic-card">
+        <div className="no-clinic-icon">🏥</div>
+        <h2>Clínica não encontrada</h2>
+        <p>
+          Este link não está associado a nenhuma clínica cadastrada.
+          Entre em contato com o administrador para obter o link correto.
+        </p>
+        <span className="no-clinic-hint">contactia.com.br · Schedule Button</span>
+      </div>
+    </div>
+  )
+}
+
+// ── App principal ─────────────────────────────────────────────────
 function App() {
-  const today = new Date()
+  const today    = new Date()
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
+
+  // Config da clínica (carregada do Supabase via /api/clinic)
+  const [idconta,      setIdconta]      = useState(null)
+  const [clinicConfig, setClinicConfig] = useState(null)  // { name, panelId, agendadoStepId, tags, professionals }
+  const [clinicLoading, setClinicLoading] = useState(true)
+  const [clinicNotFound, setClinicNotFound] = useState(false)
 
   const [uiStep, setUiStep] = useState(1)
 
   // Dados do paciente
-  const [nome, setNome] = useState('')
-  const [telefone, setTelefone] = useState('')
+  const [nome,         setNome]         = useState('')
+  const [telefone,     setTelefone]     = useState('')
   const [phonePrivate, setPhonePrivate] = useState(false)
-  const [descricao, setDescricao] = useState('')
-  const [tagIds, setTagIds] = useState(new Set([TAGS.Agendado]))
+  const [descricao,    setDescricao]    = useState('')
+  const [tagIds,       setTagIds]       = useState(new Set())
 
   // Etapas do painel CRC
-  const [steps, setSteps] = useState([])
+  const [steps,        setSteps]        = useState([])
   const [stepsLoading, setStepsLoading] = useState(true)
   const [selectedStepId, setSelectedStepId] = useState('')
 
   // Contato / card
-  const [contactId, setContactId] = useState(null)
+  const [contactId,    setContactId]    = useState(null)
   const [existingCard, setExistingCard] = useState(null)
 
-  // Calendário (só usado quando etapa selecionada é "Agendado")
-  const [viewYear, setViewYear] = useState(today.getFullYear())
+  // Calendário
+  const [viewYear,  setViewYear]  = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
-  const [selectedDate, setSelectedDate] = useState(null)
+  const [selectedDate,   setSelectedDate]   = useState(null)
   const [availableSlots, setAvailableSlots] = useState([])
-  const [slotsLoading, setSlotsLoading] = useState(false)
-  const [slotsError, setSlotsError] = useState(null)
-  const [selectedSlot, setSelectedSlot] = useState(null)
+  const [slotsLoading,   setSlotsLoading]   = useState(false)
+  const [slotsError,     setSlotsError]     = useState(null)
+  const [selectedSlot,   setSelectedSlot]   = useState(null)
 
   // Submit
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
-  // A etapa selecionada é a etapa "Agendado" quando o nome faz match
+  // A etapa selecionada aciona o Clinicorp quando:
+  // 1. clinicConfig tem agendadoStepId → match exato
+  // 2. fallback → match por nome contendo AGENDADO_STEP_NAME
   const isAgendadoStep = selectedStepId
-    ? (steps.find(s => s.id === selectedStepId)?.name ?? '').toLowerCase().includes(AGENDADO_STEP_NAME)
+    ? clinicConfig?.agendadoStepId
+      ? selectedStepId === clinicConfig.agendadoStepId
+      : (steps.find(s => s.id === selectedStepId)?.name ?? '').toLowerCase().includes(AGENDADO_STEP_NAME)
     : false
 
-  // Carrega etapas do painel e dados do contato em paralelo
+  // ── Inicialização ─────────────────────────────────────────────
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const cid = params.get('contactid') || params.get('contactId')
+    const params    = new URLSearchParams(window.location.search)
+    const conta     = params.get('idconta')
+    const cid       = params.get('contactid') || params.get('contactId')
 
-    const loadSteps = getPanelSteps()
-      .then(data => {
-        setSteps(data)
-        if (data.length > 0) setSelectedStepId(data[0].id)
+    if (!conta) {
+      setClinicLoading(false)
+      setClinicNotFound(true)
+      return
+    }
+
+    setIdconta(conta)
+
+    // 1. Carrega config da clínica
+    fetch(`/api/clinic?idconta=${conta}`)
+      .then(r => r.json())
+      .then(config => {
+        if (config.error === 'not_registered') {
+          setClinicNotFound(true)
+          setClinicLoading(false)
+          return
+        }
+
+        setClinicConfig(config)
+        setClinicLoading(false)
+
+        // Inicializa tags com "Agendado" se disponível
+        const agendadoTag = config.tags?.find(t =>
+          t.label?.toLowerCase().includes('agendado')
+        )
+        if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
+
+        // 2. Carrega etapas em paralelo com dados do contato
+        const loadSteps = getPanelSteps(config.panelId, conta)
+          .then(data => {
+            setSteps(data)
+            if (data.length > 0) setSelectedStepId(data[0].id)
+          })
+          .catch(err => console.warn('Erro ao carregar etapas:', err))
+          .finally(() => setStepsLoading(false))
+
+        if (!cid) return loadSteps
+
+        setContactId(cid)
+        Promise.all([
+          loadSteps,
+          getContact(cid, conta)
+            .then(data => {
+              if (data?.name) setNome(data.name)
+              const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
+              const priv  = isPhonePrivate(phone)
+              setPhonePrivate(priv)
+              if (!priv) setTelefone(stripCountryCode(phone))
+            })
+            .catch(err => console.warn('Erro ao carregar contato:', err)),
+          findCardByContact(cid, conta)
+            .then(card => { if (card) setExistingCard(card) })
+            .catch(() => null),
+        ])
       })
-      .catch(err => console.warn('Erro ao carregar etapas:', err))
-      .finally(() => setStepsLoading(false))
-
-    if (!cid) return void loadSteps
-
-    setContactId(cid)
-    Promise.all([
-      loadSteps,
-      getContact(cid)
-        .then(data => {
-          if (data?.name) setNome(data.name)
-          const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
-          const priv = isPhonePrivate(phone)
-          setPhonePrivate(priv)
-          if (!priv) setTelefone(stripCountryCode(phone))
-        })
-        .catch(err => console.warn('Erro ao carregar contato:', err)),
-      findCardByContact(cid)
-        .then(card => { if (card) setExistingCard(card) })
-        .catch(() => null),
-    ])
+      .catch(err => {
+        console.error('Erro ao carregar config da clínica:', err)
+        setClinicNotFound(true)
+        setClinicLoading(false)
+      })
   }, [])
 
-  // Busca slots ao selecionar uma data
+  // ── Busca slots ao selecionar data ───────────────────────────
   useEffect(() => {
-    if (!selectedDate) return
+    if (!selectedDate || !idconta) return
     setSlotsLoading(true)
     setSlotsError(null)
     setSelectedSlot(null)
     setAvailableSlots([])
-    fetchClinicorpSlots(selectedDate)
+    fetchClinicorpSlots(selectedDate, idconta)
       .then(slots => setAvailableSlots(slots))
       .catch(err => setSlotsError(err.message))
       .finally(() => setSlotsLoading(false))
@@ -117,12 +183,10 @@ function App() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
     else setViewMonth(m => m - 1)
   }
-
   const nextMonth = () => {
     if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) }
     else setViewMonth(m => m + 1)
   }
-
   const handleDayClick = (day) => {
     const dateStr = toDateStr(viewYear, viewMonth, day)
     if (dateStr < todayStr) return
@@ -131,7 +195,8 @@ function App() {
   }
 
   const toggleTag = (tagId) => {
-    if (tagId === TAGS.Agendado) return
+    const lockedTag = clinicConfig?.tags?.find(t => t.id === tagId && t.locked)
+    if (lockedTag) return
     setTagIds(prev => {
       const next = new Set(prev)
       next.has(tagId) ? next.delete(tagId) : next.add(tagId)
@@ -143,12 +208,7 @@ function App() {
     e.preventDefault()
     if (!nome.trim()) return
     if (phonePrivate && !telefone.trim()) return
-    // Se a etapa selecionada é "Agendado", abre o calendário; senão, submete direto
-    if (isAgendadoStep) {
-      setUiStep(2)
-    } else {
-      handleSubmit()
-    }
+    isAgendadoStep ? setUiStep(2) : handleSubmit()
   }
 
   const handleSubmit = async (e) => {
@@ -159,42 +219,40 @@ function App() {
 
     try {
       const selectedStep = steps.find(s => s.id === selectedStepId)
-      const stepName = selectedStep?.name ?? 'etapa selecionada'
+      const stepName     = selectedStep?.name ?? 'etapa selecionada'
 
       let finalDescription = descricao.trim()
       if (selectedDate && selectedSlot) {
-        const agendamentoLine = `Agendamento: ${selectedDate} às ${selectedSlot.from}`
-        finalDescription = agendamentoLine + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
+        const line = `Agendamento: ${selectedDate} às ${selectedSlot.from}`
+        finalDescription = line + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
       }
 
-      // Busca card em todos os painéis, depois cria ou move
-      const card = await findCardByContact(contactId).catch(() => null)
+      const card       = await findCardByContact(contactId, idconta).catch(() => null)
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
 
       if (card) {
-        await updateCardStep(card.id, selectedStepId, dueDateTime)
-        if (finalDescription) await addCardNote(card.id, finalDescription)
+        await updateCardStep(card.id, selectedStepId, idconta, dueDateTime)
+        if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(selectedStepId, nome.trim(), finalDescription, contactId, dueDateTime)
+        await createCard(selectedStepId, clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
       }
 
       if (contactId && tagIds.size > 0) {
-        await addContactTags(contactId, Array.from(tagIds))
+        await addContactTags(contactId, Array.from(tagIds), idconta)
       }
 
-      // Agenda no Clinicorp só se a etapa for "Agendado" e um slot foi selecionado
       let clinicorpStatus = null
       if (isAgendadoStep && selectedDate && selectedSlot) {
         try {
           await scheduleClinicorp({
-            patientName: nome.trim(),
+            patientName:  nome.trim(),
             patientPhone: telefone,
-            dentistId: selectedSlot.professionalId,
-            dateLocal: selectedDate,
-            fromTime: selectedSlot.from,
-            toTime: selectedSlot.to,
-            notes: finalDescription || 'Agendamento via Schedule Button',
-          })
+            dentistId:    selectedSlot.professionalId,
+            dateLocal:    selectedDate,
+            fromTime:     selectedSlot.from,
+            toTime:       selectedSlot.to,
+            notes:        finalDescription || 'Agendamento via Schedule Button',
+          }, idconta)
           clinicorpStatus = 'ok'
         } catch (err) {
           clinicorpStatus = err.message
@@ -213,15 +271,16 @@ function App() {
         setMessage({ type: 'success', text: baseText })
       }
 
-      // Reset do formulário
+      // Reset
       setUiStep(1)
       setSelectedDate(null)
       setSelectedSlot(null)
       setAvailableSlots([])
       setDescricao('')
-      setTagIds(new Set([TAGS.Agendado]))
       setExistingCard(null)
       if (steps.length > 0) setSelectedStepId(steps[0].id)
+      const agendadoTag = clinicConfig?.tags?.find(t => t.label?.toLowerCase().includes('agendado'))
+      setTagIds(agendadoTag ? new Set([agendadoTag.id]) : new Set())
       setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
@@ -232,13 +291,30 @@ function App() {
 
   const phoneInvalid = phonePrivate && !telefone.trim()
 
+  // ── Loading da clínica ────────────────────────────────────────
+  if (clinicLoading) {
+    return (
+      <div className="page">
+        <div className="clinic-loading">
+          <span className="spinner spinner-dark" />
+          <span>Carregando...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (clinicNotFound) return <NoClinic />
+
+  const professionals = clinicConfig?.professionals ?? []
+  const tagList       = clinicConfig?.tags ?? []
+
   return (
     <div className="page">
       <header className="header">
         <div className="brand">
           <div className="brand-mark"><span className="brand-initials">S</span></div>
           <div className="brand-text">
-            <h1 className="brand-name">Schedule Button</h1>
+            <h1 className="brand-name">{clinicConfig?.name || 'Schedule Button'}</h1>
             <p className="brand-sub">Criação Rápida de Cards no CRM</p>
           </div>
         </div>
@@ -293,7 +369,7 @@ function App() {
                     <input
                       type="text"
                       value={nome}
-                      onChange={(e) => setNome(e.target.value)}
+                      onChange={e => setNome(e.target.value)}
                       placeholder="Ex: João da Silva"
                       required
                     />
@@ -306,7 +382,7 @@ function App() {
                     <input
                       type="tel"
                       value={telefone}
-                      onChange={(e) => setTelefone(e.target.value)}
+                      onChange={e => setTelefone(e.target.value)}
                       placeholder="Ex: (92) 98765-4321"
                       className={phoneInvalid ? 'input-error' : ''}
                       required={phonePrivate}
@@ -331,7 +407,7 @@ function App() {
                     ) : (
                       <select
                         value={selectedStepId}
-                        onChange={(e) => setSelectedStepId(e.target.value)}
+                        onChange={e => setSelectedStepId(e.target.value)}
                         className="step-select"
                         required
                       >
@@ -347,14 +423,14 @@ function App() {
 
                   <div className="form-group">
                     <label>Etiquetas do Contato</label>
-                    <TagChips tagIds={tagIds} onToggle={toggleTag} />
+                    <TagChips tagIds={tagIds} onToggle={toggleTag} tagList={tagList} />
                   </div>
 
                   <div className="form-group">
                     <label>Observações</label>
                     <textarea
                       value={descricao}
-                      onChange={(e) => setDescricao(e.target.value)}
+                      onChange={e => setDescricao(e.target.value)}
                       placeholder="Informações adicionais do paciente..."
                       rows="3"
                     />
@@ -406,13 +482,14 @@ function App() {
                       slots={availableSlots}
                       selectedSlot={selectedSlot}
                       onSelectSlot={setSelectedSlot}
+                      professionals={professionals}
                     />
                   </div>
                 )}
               </div>
 
               {selectedSlot && (() => {
-                const prof = CLINICORP_PROFESSIONALS.find(p => p.id === selectedSlot.professionalId)
+                const prof = professionals.find(p => p.id === selectedSlot.professionalId)
                 return (
                   <div className="slot-summary">
                     ✓ {selectedDate} às {selectedSlot.from}
