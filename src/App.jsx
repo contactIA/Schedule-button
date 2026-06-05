@@ -102,8 +102,16 @@ function App() {
     ?? clinicConfig?.units?.[0]
     ?? null
 
-  // O botão serve exclusivamente para agendamentos — usa sempre o agendadoStepId
-  const effectiveAgendadoStepId = activeUnit?.agendadoStepId ?? clinicConfig?.agendadoStepId
+  // Painel ativo: o selecionado pelo operador (ou o primeiro configurado)
+  const [selectedPanelId, setSelectedPanelId] = useState(null)
+  const activePanel = clinicConfig?.panels?.find(p => p.id === selectedPanelId)
+    ?? clinicConfig?.panels?.[0]
+    ?? null
+
+  // O botão serve exclusivamente para agendamentos — usa sempre o agendadoStepId do painel ativo
+  const effectiveAgendadoStepId = activeUnit?.agendadoStepId
+    ?? activePanel?.agendadoStepId
+    ?? clinicConfig?.agendadoStepId
 
   // ── Inicialização ─────────────────────────────────────────────
   useEffect(() => {
@@ -134,9 +142,11 @@ function App() {
         setDataLoading(true)
 
 
-        // Unidade padrão (primeira) — seleciona e carrega seus steps
+        // Seleciona unidade e painel padrão (primeiro de cada)
         const defaultUnit = config.units?.[0] ?? null
         if (defaultUnit) setSelectedUnitId(defaultUnit.id)
+        const defaultPanel = config.panels?.[0] ?? null
+        if (defaultPanel) setSelectedPanelId(defaultPanel.id)
 
         // Steps vêm do banco se disponíveis e com nomes válidos
         const rawCached = defaultUnit?.steps?.length
@@ -243,7 +253,7 @@ function App() {
         await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime)
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(effectiveAgendadoStepId, clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
+        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
       }
 
       let clinicorpStatus = null
@@ -367,6 +377,25 @@ function App() {
               </div>
 
               <form className="card-form" onSubmit={handleNext}>
+
+                {/* Seletor de painel — só aparece com 2+ painéis */}
+                {(clinicConfig?.panels?.length ?? 0) > 1 && (
+                  <div className="form-section">
+                    <span className="form-section-label">Painel</span>
+                    <div className="unit-selector">
+                      {clinicConfig.panels.map(panel => (
+                        <button
+                          key={panel.id}
+                          type="button"
+                          className={`unit-btn${selectedPanelId === panel.id ? ' unit-btn-active' : ''}`}
+                          onClick={() => setSelectedPanelId(panel.id)}
+                        >
+                          {panel.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Seletor de unidade — só aparece com 2+ unidades */}
                 {(clinicConfig?.units?.length ?? 0) > 1 && (

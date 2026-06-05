@@ -181,15 +181,29 @@ function AdminForm({ onSuccess }) {
   const [clinicName, setClinicName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
-  const [helenaToken, setHelenaToken] = useState('')
-  const [helenaPanels, setHelenaPanels]   = useState([])   // painéis carregados
-  const [selectedPanelId, setSelectedPanelId] = useState('')
-  const [agendadoStepId, setAgendadoStepId]   = useState('')
-  const [stepsLoading, setStepsLoading]   = useState(false)
-  const [stepsError,   setStepsError]     = useState('')
+  const [helenaToken,   setHelenaToken]   = useState('')
+  const [helenaPanels,  setHelenaPanels]  = useState([])   // todos os painéis da conta
+  const [pickedPanels,  setPickedPanels]  = useState([])   // painéis escolhidos pelo admin
+  // pickedPanels: [{ id, name, displayName, agendadoStepId, steps }]
+  const [stepsLoading,  setStepsLoading]  = useState(false)
+  const [stepsError,    setStepsError]    = useState('')
 
-  // Etapas do painel principal selecionado
-  const panelSteps = helenaPanels.find(p => p.id === selectedPanelId)?.steps ?? []
+  const togglePickPanel = (panel) => {
+    setPickedPanels(prev => {
+      const exists = prev.find(p => p.id === panel.id)
+      if (exists) return prev.filter(p => p.id !== panel.id)
+      return [...prev, {
+        id:            panel.id,
+        name:          panel.title || panel.name || '',
+        displayName:   panel.title || panel.name || '',
+        agendadoStepId: panel.steps?.[0]?.id ?? '',
+        steps:         panel.steps ?? [],
+      }]
+    })
+  }
+
+  const updatePickedPanel = (id, field, value) =>
+    setPickedPanels(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
 
   // Unidades Clinicorp (multi-unidade)
   const [units, setUnits] = useState([{
@@ -228,18 +242,12 @@ function AdminForm({ onSuccess }) {
     setStepsLoading(true)
     setStepsError('')
     setHelenaPanels([])
-    setSelectedPanelId('')
-    setAgendadoStepId('')
+    setPickedPanels([])
     try {
       const res = await fetch(`/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}&_t=${Date.now()}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
-      const panels = data.panels ?? []
-      setHelenaPanels(panels)
-      if (panels.length > 0) {
-        setSelectedPanelId(panels[0].id)
-        if (panels[0].steps?.length > 0) setAgendadoStepId(panels[0].steps[0].id)
-      }
+      setHelenaPanels(data.panels ?? [])
     } catch (err) {
       setStepsError(err.message)
     } finally {
@@ -266,9 +274,16 @@ function AdminForm({ onSuccess }) {
           clinicName,
           slug,
           helenaToken,
-          helenaPanelId:   selectedPanelId,
-          agendadoStepId,
-          helenaSteps:     panelSteps.map(s => ({ id: s.id, name: s.title || s.name || s.stepName || s.label || s.id })),
+          // Painel principal = primeiro painel escolhido (fallback de compatibilidade)
+          helenaPanelId:   pickedPanels[0]?.id ?? '',
+          agendadoStepId:  pickedPanels[0]?.agendadoStepId ?? '',
+          helenaSteps:     (pickedPanels[0]?.steps ?? []).map(s => ({ id: s.id, name: s.title || s.name || s.id })),
+          // Todos os painéis escolhidos com seus nomes e steps
+          helenaPanels: pickedPanels.map(p => ({
+            id:            p.id,
+            name:          p.displayName || p.name,
+            agendadoStepId: p.agendadoStepId,
+          })),
           units: units.map(u => ({
             name:            u.name,
             clinicorpUser:   u.clinicorpUser,
@@ -408,51 +423,72 @@ function AdminForm({ onSuccess }) {
               {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>⚠ {stepsError}</span>}
             </div>
 
+            {/* Lista de painéis disponíveis para seleção */}
             {helenaPanels.length > 0 && (
-              <>
-                <div className="admin-field">
-                  <label>Painel CRC (destino dos cards) *</label>
-                  <select
-                    value={selectedPanelId}
-                    onChange={e => {
-                      setSelectedPanelId(e.target.value)
-                      const panel = helenaPanels.find(p => p.id === e.target.value)
-                      setAgendadoStepId(panel?.steps?.[0]?.id ?? '')
-                    }}
-                    className="step-select"
-                    required
-                  >
-                    {helenaPanels.map(p => (
-                      <option key={p.id} value={p.id}>{p.title}</option>
-                    ))}
-                  </select>
-                  <span className="admin-field-hint">Cards serão criados neste painel.</span>
-                </div>
+              <div className="admin-field">
+                <label>Selecione os painéis que aparecerão no botão *</label>
+                <div className="panels-list">
+                  {helenaPanels.map(panel => {
+                    const picked = pickedPanels.find(p => p.id === panel.id)
+                    return (
+                      <div key={panel.id} className={`panel-item${picked ? ' panel-item-active' : ''}`}>
+                        <button
+                          type="button"
+                          className="panel-item-toggle"
+                          onClick={() => togglePickPanel(panel)}
+                        >
+                          <span className={`panel-item-check${picked ? ' checked' : ''}`}>
+                            {picked ? '✓' : '+'}
+                          </span>
+                          <span className="panel-item-title">{panel.title || panel.id}</span>
+                        </button>
 
-                {panelSteps.length > 0 && (
-                  <div className="admin-field">
-                    <label>Etapa que aciona o calendário do Clinicorp *</label>
-                    <select
-                      value={agendadoStepId}
-                      onChange={e => setAgendadoStepId(e.target.value)}
-                      className="step-select"
-                      required
-                    >
-                      {panelSteps.map(s => (
-                        <option key={s.id} value={s.id}>{s.title}</option>
-                      ))}
-                    </select>
-                    <span className="admin-field-hint">
-                      Quando o operador selecionar esta etapa, o calendário do Clinicorp abrirá.
-                    </span>
-                  </div>
+                        {picked && (
+                          <div className="panel-item-config">
+                            <div className="admin-field">
+                              <label>Nome que o operador verá</label>
+                              <input
+                                type="text"
+                                value={picked.displayName}
+                                onChange={e => updatePickedPanel(panel.id, 'displayName', e.target.value)}
+                                placeholder={panel.title || 'Ex: CRC A, Urgência...'}
+                              />
+                            </div>
+                            {picked.steps.length > 0 && (
+                              <div className="admin-field">
+                                <label>Etapa que aciona o Clinicorp</label>
+                                <select
+                                  value={picked.agendadoStepId}
+                                  onChange={e => updatePickedPanel(panel.id, 'agendadoStepId', e.target.value)}
+                                  className="step-select"
+                                >
+                                  {picked.steps.map(s => (
+                                    <option key={s.id} value={s.id}>{s.title || s.name || s.id}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {pickedPanels.length === 0 && (
+                  <span className="admin-field-hint" style={{color:'#dc2626'}}>
+                    Selecione pelo menos um painel.
+                  </span>
                 )}
-              </>
+              </div>
             )}
 
             <div className="admin-actions">
               <button type="button" className="admin-btn-secondary" onClick={handleBack}>← Voltar</button>
-              <button type="submit" className="admin-btn-primary" disabled={!helenaToken || !agendadoStepId}>
+              <button
+                type="submit"
+                className="admin-btn-primary"
+                disabled={!helenaToken || pickedPanels.length === 0 || pickedPanels.some(p => !p.agendadoStepId)}
+              >
                 Próximo →
               </button>
             </div>

@@ -77,11 +77,12 @@ export default async function handler(req, res) {
     clinicName,
     slug,
     helenaToken,
-    helenaPanelId,
-    agendadoStepId,
-    helenaSteps   = [],   // etapas do painel principal (salvas no banco)
-    helenaTags    = [],   // etiquetas selecionadas (salvas no banco)
-    units         = [],   // array de unidades Clinicorp
+    helenaPanelId,          // painel principal (fallback)
+    agendadoStepId,         // step do painel principal (fallback)
+    helenaSteps   = [],
+    helenaTags    = [],
+    helenaPanels  = [],     // todos os painéis escolhidos pelo admin
+    units         = [],
     helenaAccountId,
   } = req.body ?? {}
 
@@ -125,6 +126,7 @@ export default async function handler(req, res) {
         helena_agendado_step_id: agendadoStepId,
         helena_steps:            helenaSteps,
         helena_tags:             fetchedTags,
+        helena_panels:           helenaPanels.length > 0 ? helenaPanels : null,
         helena_account_id:       accountId ?? null,
       })
       .select('id')

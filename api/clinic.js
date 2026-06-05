@@ -30,14 +30,31 @@ export default async function handler(req, res) {
                         : clinicSteps,
     }))
 
+    // Monta lista de painéis: usa helena_panels se configurado, senão cria um painel único com os dados legados
+    const panels = clinic.helena_panels?.length
+      ? clinic.helena_panels.map(p => ({
+          id:            p.id,
+          name:          p.name,
+          agendadoStepId: p.agendadoStepId,
+          // Steps vêm do banco clínica (todos os painéis compartilham os steps do painel principal por ora)
+          steps:         clinicSteps,
+        }))
+      : [{
+          id:            clinic.helena_panel_id,
+          name:          clinic.name,
+          agendadoStepId: clinic.helena_agendado_step_id,
+          steps:         clinicSteps,
+        }]
+
     return res.status(200).json({
       name:           clinic.name,
-      // Defaults da clínica (usado quando unit não tem painel próprio)
-      panelId:        clinic.helena_panel_id,
-      agendadoStepId: clinic.helena_agendado_step_id,
+      // Painel principal (compatibilidade)
+      panelId:        panels[0]?.id,
+      agendadoStepId: panels[0]?.agendadoStepId,
       steps:          clinicSteps,
       tags:           clinic.helena_tags  ?? [],
       professionals:  clinic.professionals ?? [],
+      panels,
       units,
     })
   } catch (err) {
