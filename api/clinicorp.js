@@ -1,9 +1,7 @@
-import { getClinicByAccountId } from './_supabase.js'
+import { getClinicByAccountId, getUnitById } from './_supabase.js'
 
 const BASE = 'https://api.clinicorp.com/rest/v1'
 
-// A API Clinicorp pode retornar horários sem zero à esquerda (ex: "8:0"), o que torna
-// a string de data inválida para o Date constructor. Esta função normaliza para "HH:MM".
 function normTime(t) {
   if (!t) return ''
   const [h, m] = t.split(':')
@@ -44,48 +42,57 @@ async function createPatient(name, phone, auth, subscriberId) {
   return null
 }
 
+// Resolve as credenciais: busca unit pelo unitId, com fallback para a primeira unit da clínica
+async function resolveUnit(idconta, unitId) {
+  if (unitId) {
+    const unit = await getUnitById(unitId)
+    if (unit) return unit
+  }
+  // Fallback: primeira unidade ativa da clínica
+  const clinic = await getClinicByAccountId(idconta)
+  if (!clinic?.units?.length) throw new Error('Nenhuma unidade configurada para esta clínica.')
+  return clinic.units[0]
+}
+
 export default async function handler(req, res) {
   const idconta = req.query?.idconta || req.headers?.['x-idconta']
+  const unitId  = req.query?.unitId  || req.body?.unitId
   if (!idconta) return res.status(400).json({ error: 'Parâmetro idconta obrigatório' })
 
-  const clinic = await getClinicByAccountId(idconta)
-  if (!clinic) return res.status(404).json({ error: 'not_registered' })
+  let unit
+  try {
+    unit = await resolveUnit(idconta, unitId)
+  } catch (err) {
+    return res.status(404).json({ error: err.message })
+  }
 
-  const auth         = 'Basic ' + Buffer.from(`${clinic.clinicorp_user}:${clinic.clinicorp_token}`).toString('base64')
-  const subscriberId = clinic.clinicorp_subscriber_id
-  const businessId   = clinic.clinicorp_business_id
-  const codeLink     = clinic.clinicorp_code_link
-  const categoryColor       = clinic.clinicorp_category_color || '#ffff00'
-  const categoryDescription = clinic.clinicorp_category_description || 'AVALIAÇÃO'
+  const auth         = 'Basic ' + Buffer.from(`${unit.clinicorp_user}:${unit.clinicorp_token}`).toString('base64')
+  const subscriberId = unit.clinicorp_subscriber_id
+  const businessId   = unit.clinicorp_business_id
+  const codeLink     = unit.clinicorp_code_link
+  const categoryColor       = unit.clinicorp_category_color       || '#ffff00'
+  const categoryDescription = unit.clinicorp_category_description || 'AVALIAÇÃO'
 
   // ── GET: busca horários disponíveis ──────────────────────────────
   if (req.method === 'GET') {
     const date = req.query?.date
     if (!date) return res.status(400).json({ error: 'Parâmetro date obrigatório (YYYY-MM-DD)' })
 
-    console.log('[Clinicorp GET] config:', { subscriberId, businessId, codeLink, date })
+    console.log('[Clinicorp GET] unit:', unit.name, '| subscriberId:', subscriberId, '| codeLink:', codeLink, '| date:', date)
 
     try {
       const url = `${BASE}/appointment/get_avaliable_times_calendar?subscriber_id=${subscriberId}&code_link=${codeLink}&date=${date}`
       const { ok, status, body } = await clinicorpFetch(url, auth)
-
       if (!ok) return res.status(status).json({
         error: body.Message || body.message || 'Erro ao buscar horários no Clinicorp',
         detail: body,
       })
-
       const raw = Array.isArray(body) ? body : (body.AvaliableTimes ?? [])
       const slots = raw
         .filter(s => s.isSelectable !== false)
-        .map(s => ({
-          from: normTime(s.From),
-          to:   normTime(s.To),
-          professionalId: String(s.ProfessionalId),
-        }))
-
+        .map(s => ({ from: normTime(s.From), to: normTime(s.To), professionalId: String(s.ProfessionalId) }))
       return res.status(200).json(slots)
     } catch (err) {
-      console.error('[Clinicorp GET] exception:', err.message)
       return res.status(500).json({ error: err.message })
     }
   }
@@ -94,7 +101,6 @@ export default async function handler(req, res) {
 
   // ── POST: busca/cria paciente e agenda ────────────────────────────
   const { patientName, patientPhone, dentistId, dateLocal, fromTime, toTime, notes } = req.body || {}
-
   if (!patientName || !dentistId || !dateLocal || !fromTime || !toTime) {
     return res.status(400).json({ error: 'Campos obrigatórios: patientName, dentistId, dateLocal, fromTime, toTime' })
   }
@@ -111,8 +117,7 @@ export default async function handler(req, res) {
       PatientName:        patientName,
       MobilePhone:        patientPhone ? patientPhone.replace(/\D/g, '') : '',
       date:               `${dateLocal}T03:00:00.000Z`,
-      fromTime,
-      toTime,
+      fromTime, toTime,
       Notes:              notes || 'Agendamento via Schedule Button',
       CategoryColor:      categoryColor,
       CategoryDescription: categoryDescription,
@@ -122,15 +127,12 @@ export default async function handler(req, res) {
       `${BASE}/appointment/create_appointment_by_api`, auth,
       { method: 'POST', body: JSON.stringify(payload) }
     )
-
     if (!ok || body.isBusy) {
       const errorMsg = body.msg || body.Message || body.message || body.error || `Erro ao criar agendamento (${status})`
       return res.status(400).json({ error: errorMsg, detail: body })
     }
-
     return res.status(200).json({ success: true, data: body })
   } catch (err) {
-    console.error('[Clinicorp POST] exception:', err.message)
     return res.status(500).json({ error: err.message })
   }
 }

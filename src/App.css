@@ -316,6 +316,37 @@ body {
 }
 .form-group textarea { resize: vertical; }
 
+/* ── Seletor de unidade ── */
+.unit-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.unit-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.unit-btn:hover { border-color: #9333EA; color: #7C3AED; background: #faf5ff; }
+
+.unit-btn-active {
+  background: linear-gradient(135deg, #7C3AED, #C026D3, #DC2626);
+  border-color: transparent;
+  color: #fff;
+}
+
 /* ── Step Select ── */
 .step-select {
   width: 100%; padding: 11px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px;

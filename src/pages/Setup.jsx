@@ -188,13 +188,30 @@ function AdminForm({ onSuccess }) {
   const [stepsLoading, setStepsLoading]   = useState(false)
   const [stepsError,   setStepsError]     = useState('')
 
-  // Etapas do painel selecionado
+  // Etapas do painel principal selecionado
   const panelSteps = helenaPanels.find(p => p.id === selectedPanelId)?.steps ?? []
-  const [clinicorpUser, setClinicorpUser] = useState('')
-  const [clinicorpToken, setClinicorpToken] = useState('')
-  const [subscriberId, setSubscriberId] = useState('')
-  const [codeLink, setCodeLink] = useState('')
+
+  // Unidades Clinicorp (multi-unidade)
+  const [units, setUnits] = useState([{
+    name: 'Unidade Principal', clinicorpUser: '', clinicorpToken: '',
+    subscriberId: '', codeLink: '', helenaPanelId: '', agendadoStepId: '',
+    helenaSteps: [], expanded: true,
+  }])
   const [submitError, setSubmitError] = useState('')
+
+  const addUnit = () => setUnits(u => [...u, {
+    name: `Unidade ${u.length + 1}`, clinicorpUser: '', clinicorpToken: '',
+    subscriberId: '', codeLink: '', helenaPanelId: '', agendadoStepId: '',
+    helenaSteps: [], expanded: true,
+  }])
+
+  const removeUnit = (i) => setUnits(u => u.filter((_, idx) => idx !== i))
+
+  const updateUnit = (i, field, value) =>
+    setUnits(u => u.map((unit, idx) => idx === i ? { ...unit, [field]: value } : unit))
+
+  const toggleUnit = (i) =>
+    setUnits(u => u.map((unit, idx) => idx === i ? { ...unit, expanded: !unit.expanded } : unit))
 
   const handleNameChange = (val) => {
     setClinicName(val)
@@ -245,16 +262,33 @@ function AdminForm({ onSuccess }) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicName, slug, helenaToken, helenaPanelId: selectedPanelId, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser, codeLink: codeLink || undefined }),
+        body: JSON.stringify({
+          clinicName,
+          slug,
+          helenaToken,
+          helenaPanelId:   selectedPanelId,
+          agendadoStepId,
+          helenaSteps:     panelSteps.map(s => ({ id: s.id, name: s.title ?? s.name ?? '' })),
+          units: units.map(u => ({
+            name:            u.name,
+            clinicorpUser:   u.clinicorpUser,
+            clinicorpToken:  u.clinicorpToken,
+            subscriberId:    u.subscriberId || u.clinicorpUser,
+            codeLink:        u.codeLink || undefined,
+            helenaPanelId:   u.helenaPanelId   || null,
+            agendadoStepId:  u.agendadoStepId  || null,
+            helenaSteps:     u.helenaSteps?.length ? u.helenaSteps : null,
+          })),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
       onSuccess({
         clinicName,
         slug,
-        professionalsCount:   data.professionalsCount,
-        helenaAccountId:      data.helenaAccountId,
-        accountAutoDetected:  data.accountAutoDetected,
+        helenaAccountId:     data.helenaAccountId,
+        accountAutoDetected: data.accountAutoDetected,
+        unitsCount:          data.units?.length ?? units.length,
       })
     } catch (err) {
       setSubmitError(err.message)
@@ -425,80 +459,133 @@ function AdminForm({ onSuccess }) {
           </form>
         )}
 
-        {/* ── Passo 3: Clinicorp ── */}
+        {/* ── Passo 3: Unidades Clinicorp ── */}
         {step === 3 && (
           <form onSubmit={handleSubmit} className="admin-form">
             <div className="admin-step-header">
-              <h2>Clinicorp</h2>
-              <p>Credenciais da API. Encontre em <strong>Sistema → Gerenciar Assinatura → Acesso Externo</strong>.</p>
+              <h2>Unidades Clinicorp</h2>
+              <p>Adicione uma ou mais unidades. Cada unidade tem suas próprias credenciais.</p>
             </div>
 
-            <div className="admin-field">
-              <label>Usuário da API *</label>
-              <input
-                type="text"
-                value={clinicorpUser}
-                onChange={e => setClinicorpUser(e.target.value)}
-                placeholder="Ex: clinicasorriso"
-                required
-                autoFocus
-                autoComplete="off"
-              />
+            <div className="units-list">
+              {units.map((unit, i) => (
+                <div key={i} className="unit-card">
+                  {/* Header da unidade */}
+                  <div className="unit-card-header" onClick={() => toggleUnit(i)}>
+                    <span className="unit-card-name">
+                      {unit.name || `Unidade ${i + 1}`}
+                    </span>
+                    <div className="unit-card-actions">
+                      {units.length > 1 && (
+                        <button
+                          type="button"
+                          className="unit-remove-btn"
+                          onClick={e => { e.stopPropagation(); removeUnit(i) }}
+                        >✕</button>
+                      )}
+                      <span className="unit-toggle">{unit.expanded ? '▲' : '▼'}</span>
+                    </div>
+                  </div>
+
+                  {unit.expanded && (
+                    <div className="unit-card-body">
+                      <div className="admin-field">
+                        <label>Nome da unidade *</label>
+                        <input type="text" value={unit.name}
+                          onChange={e => updateUnit(i, 'name', e.target.value)}
+                          placeholder="Ex: Unidade Centro" required />
+                      </div>
+
+                      <div className="admin-field">
+                        <label>Usuário API Clinicorp *</label>
+                        <input type="text" value={unit.clinicorpUser}
+                          onChange={e => updateUnit(i, 'clinicorpUser', e.target.value)}
+                          placeholder="Ex: clinicasorriso" required autoComplete="off" />
+                      </div>
+
+                      <div className="admin-field">
+                        <label>Token API Clinicorp *</label>
+                        <input type="password" value={unit.clinicorpToken}
+                          onChange={e => updateUnit(i, 'clinicorpToken', e.target.value)}
+                          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
+                      </div>
+
+                      <div className="admin-field">
+                        <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                        <input type="text" value={unit.codeLink}
+                          onChange={e => updateUnit(i, 'codeLink', e.target.value.replace(/\D/g,''))}
+                          placeholder="Ex: 75094" />
+                        <span className="admin-field-hint">Se não informado, o sistema busca automaticamente.</span>
+                      </div>
+
+                      <div className="admin-field">
+                        <label>Subscriber ID <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                        <input type="text" value={unit.subscriberId}
+                          onChange={e => updateUnit(i, 'subscriberId', e.target.value.trim())}
+                          placeholder={unit.clinicorpUser || 'Padrão: mesmo do usuário da API'} />
+                      </div>
+
+                      {/* Painel Helena próprio (opcional) */}
+                      {helenaPanels.length > 0 && (
+                        <div className="admin-field">
+                          <label>Painel Helena <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                          <select
+                            value={unit.helenaPanelId}
+                            onChange={e => {
+                              const pid = e.target.value
+                              const panel = helenaPanels.find(p => p.id === pid)
+                              updateUnit(i, 'helenaPanelId', pid)
+                              updateUnit(i, 'agendadoStepId', panel?.steps?.[0]?.id ?? '')
+                              updateUnit(i, 'helenaSteps', panel?.steps ?? [])
+                            }}
+                            className="step-select"
+                          >
+                            <option value="">Mesmo da clínica</option>
+                            {helenaPanels.map(p => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </select>
+                          <span className="admin-field-hint">
+                            Deixe em branco para usar o painel configurado na etapa anterior.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Etapa agendado própria (só se tiver painel próprio) */}
+                      {unit.helenaPanelId && unit.helenaSteps?.length > 0 && (
+                        <div className="admin-field">
+                          <label>Etapa que aciona Clinicorp (desta unidade) *</label>
+                          <select
+                            value={unit.agendadoStepId}
+                            onChange={e => updateUnit(i, 'agendadoStepId', e.target.value)}
+                            className="step-select"
+                            required
+                          >
+                            {unit.helenaSteps.map(s => (
+                              <option key={s.id} value={s.id}>{s.title ?? s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
 
-            <div className="admin-field">
-              <label>Token da API *</label>
-              <input
-                type="password"
-                value={clinicorpToken}
-                onChange={e => setClinicorpToken(e.target.value)}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                required
-              />
-            </div>
+            <button type="button" className="admin-add-unit-btn" onClick={addUnit}>
+              + Adicionar outra unidade
+            </button>
 
-            <div className="admin-field">
-              <label>Code Link <span style={{fontWeight:400, color:'#94a3b8'}}>(opcional)</span></label>
-              <input
-                type="text"
-                value={codeLink}
-                onChange={e => setCodeLink(e.target.value.replace(/\D/g, ''))}
-                placeholder="Ex: 75094"
-              />
-              <span className="admin-field-hint">
-                Encontre em Sistema → Gerenciar Assinatura → Acesso Externo e Integrações. Se não informado, o sistema tenta buscar automaticamente.
-              </span>
-            </div>
-
-            <div className="admin-field">
-              <label>Subscriber ID <span style={{fontWeight:400, color:'#94a3b8'}}>(opcional)</span></label>
-              <input
-                type="text"
-                value={subscriberId}
-                onChange={e => setSubscriberId(e.target.value.trim())}
-                placeholder={clinicorpUser || 'Deixe em branco para usar o usuário da API'}
-              />
-              <span className="admin-field-hint">
-                Geralmente igual ao usuário da API. Preencha apenas se diferente (ex: CNPJ sem pontuação).
-              </span>
-            </div>
-
-            <div className="admin-info-box">
-              <strong>O que será buscado automaticamente:</strong>
-              <ul>
-                <li>Unidades da clínica</li>
-                <li>Profissionais e avaliadores</li>
-                <li>Categorias de agendamento</li>
-              </ul>
-            </div>
-
-            {submitError && (
-              <div className="admin-error-box">{submitError}</div>
-            )}
+            {submitError && <div className="admin-error-box">{submitError}</div>}
 
             <div className="admin-actions">
               <button type="button" className="admin-btn-secondary" onClick={handleBack}>← Voltar</button>
-              <button type="submit" className="admin-btn-primary" disabled={!clinicorpUser || !clinicorpToken || !subscriberId || loading}>
+              <button
+                type="submit"
+                className="admin-btn-primary"
+                disabled={units.some(u => !u.clinicorpUser || !u.clinicorpToken) || loading}
+              >
                 {loading
                   ? <span className="admin-btn-loading"><span className="admin-spinner" />Salvando...</span>
                   : 'Cadastrar clínica'}
@@ -530,7 +617,7 @@ function Success({ data, onNew }) {
         <h2 className="success-title">Clínica cadastrada!</h2>
         <p className="success-sub">
           <strong>{data.clinicName}</strong> foi adicionada com sucesso.
-          {data.professionalsCount > 0 && ` ${data.professionalsCount} profissional(is) importado(s).`}
+          {data.unitsCount > 0 && ` ${data.unitsCount} unidade(s) configurada(s).`}
         </p>
 
         {data.helenaAccountId && (

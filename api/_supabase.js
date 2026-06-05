@@ -9,8 +9,7 @@ function getSupabase() {
   return _client
 }
 
-// Busca config completa da clínica pelo helena_account_id (vem do ?idconta= na URL).
-// Consulta a tabela clinics diretamente (não usa a view clinic_config que pode estar desatualizada).
+// Busca config completa da clínica + unidades pelo helena_account_id
 export async function getClinicByAccountId(idconta) {
   const sb = getSupabase()
 
@@ -27,14 +26,40 @@ export async function getClinicByAccountId(idconta) {
   const clinic = data?.[0] ?? null
   if (!clinic) return null
 
-  // Busca profissionais separadamente
-  const { data: professionals } = await sb
-    .from('professionals')
-    .select('clinicorp_id, name, is_evaluator')
-    .eq('clinic_id', clinic.id)
-    .eq('active', true)
+  // Busca profissionais e unidades em paralelo
+  const [{ data: professionals }, { data: units, error: unitsError }] = await Promise.all([
+    sb.from('professionals')
+      .select('clinicorp_id, name, is_evaluator')
+      .eq('clinic_id', clinic.id)
+      .eq('active', true),
+    sb.from('units')
+      .select('*')
+      .eq('clinic_id', clinic.id)
+      .eq('active', true)
+      .order('position', { ascending: true }),
+  ])
 
-  return { ...clinic, professionals: professionals ?? [] }
+  if (unitsError) throw new Error(`Erro ao buscar unidades: ${unitsError.message}`)
+
+  return {
+    ...clinic,
+    professionals: professionals ?? [],
+    units: units ?? [],
+  }
+}
+
+// Busca uma unidade específica por ID (usado nos handlers Clinicorp)
+export async function getUnitById(unitId) {
+  const sb = getSupabase()
+  const { data, error } = await sb
+    .from('units')
+    .select('*')
+    .eq('id', unitId)
+    .eq('active', true)
+    .limit(1)
+
+  if (error) throw new Error(`Erro ao buscar unidade: ${error.message}`)
+  return data?.[0] ?? null
 }
 
 export { getSupabase }

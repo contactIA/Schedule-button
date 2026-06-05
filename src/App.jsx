@@ -74,7 +74,10 @@ function App() {
   const [descricao,    setDescricao]    = useState('')
   const [tagIds,       setTagIds]       = useState(new Set())
 
-  // Etapas do painel CRC
+  // Unidade selecionada
+  const [selectedUnitId, setSelectedUnitId] = useState(null)
+
+  // Etapas do painel CRC (da unidade ou da clínica)
   const [steps,        setSteps]        = useState([])
   const [stepsLoading, setStepsLoading] = useState(true)
   const [selectedStepId, setSelectedStepId] = useState('')
@@ -96,12 +99,16 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
-  // A etapa selecionada aciona o Clinicorp quando:
-  // 1. clinicConfig tem agendadoStepId → match exato
-  // 2. fallback → match por nome contendo AGENDADO_STEP_NAME
+  // Unidade ativa: a selecionada ou a primeira disponível
+  const activeUnit = clinicConfig?.units?.find(u => u.id === selectedUnitId)
+    ?? clinicConfig?.units?.[0]
+    ?? null
+
+  // A etapa selecionada aciona o Clinicorp usando o agendadoStepId da unidade ativa (ou da clínica)
+  const effectiveAgendadoStepId = activeUnit?.agendadoStepId ?? clinicConfig?.agendadoStepId
   const isAgendadoStep = selectedStepId
-    ? clinicConfig?.agendadoStepId
-      ? selectedStepId === clinicConfig.agendadoStepId
+    ? effectiveAgendadoStepId
+      ? selectedStepId === effectiveAgendadoStepId
       : (steps.find(s => s.id === selectedStepId)?.name ?? '').toLowerCase().includes(AGENDADO_STEP_NAME)
     : false
 
@@ -145,8 +152,19 @@ function App() {
           })
           .catch(() => {})
 
-        const loadPanel = getPanelData(config.panelId, conta)
-          .then(({ steps }) => {
+        // Unidade padrão (primeira) — seleciona e carrega seus steps
+        const defaultUnit = config.units?.[0] ?? null
+        if (defaultUnit) setSelectedUnitId(defaultUnit.id)
+
+        // Steps vêm do banco (unit ou clínica); só busca da API se estiver vazio
+        const cachedSteps = defaultUnit?.steps?.length
+          ? defaultUnit.steps
+          : config.steps ?? []
+
+        const loadPanel = (cachedSteps.length > 0
+          ? Promise.resolve({ steps: cachedSteps })
+          : getPanelData(defaultUnit?.panelId ?? config.panelId, conta)
+        ).then(({ steps }) => {
             setSteps(steps)
             if (steps.length > 0) setSelectedStepId(steps[0].id)
           })
@@ -192,11 +210,11 @@ function App() {
     setSlotsError(null)
     setSelectedSlot(null)
     setAvailableSlots([])
-    fetchClinicorpSlots(selectedDate, idconta)
+    fetchClinicorpSlots(selectedDate, idconta, activeUnit?.id)
       .then(slots => setAvailableSlots(slots))
       .catch(err => setSlotsError(err.message))
       .finally(() => setSlotsLoading(false))
-  }, [selectedDate])
+  }, [selectedDate, selectedUnitId])
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
@@ -271,7 +289,7 @@ function App() {
             fromTime:     selectedSlot.from,
             toTime:       selectedSlot.to,
             notes:        finalDescription || 'Agendamento via Schedule Button',
-          }, idconta)
+          }, idconta, activeUnit?.id)
           clinicorpStatus = 'ok'
         } catch (err) {
           clinicorpStatus = err.message
@@ -385,6 +403,35 @@ function App() {
               </div>
 
               <form className="card-form" onSubmit={handleNext}>
+
+                {/* Seletor de unidade — só aparece com 2+ unidades */}
+                {(clinicConfig?.units?.length ?? 0) > 1 && (
+                  <div className="form-section">
+                    <span className="form-section-label">Unidade</span>
+                    <div className="unit-selector">
+                      {clinicConfig.units.map(unit => (
+                        <button
+                          key={unit.id}
+                          type="button"
+                          className={`unit-btn${selectedUnitId === unit.id ? ' unit-btn-active' : ''}`}
+                          onClick={() => {
+                            setSelectedUnitId(unit.id)
+                            // Atualiza steps se a unidade tiver painel próprio
+                            const unitSteps = unit.steps?.length ? unit.steps : clinicConfig.steps ?? []
+                            setSteps(unitSteps)
+                            if (unitSteps.length > 0) setSelectedStepId(unitSteps[0].id)
+                            // Limpa slots ao trocar unidade
+                            setSelectedDate(null)
+                            setSelectedSlot(null)
+                            setAvailableSlots([])
+                          }}
+                        >
+                          {unit.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-section">
                   <span className="form-section-label">Dados do Paciente</span>

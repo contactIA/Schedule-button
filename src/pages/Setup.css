@@ -801,6 +801,86 @@
 
 .admin-btn-secondary:hover { background: #e2e8f0 }
 
+/* ── Unit Cards ── */
+.units-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.unit-card {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.unit-card:focus-within { border-color: #9333EA; }
+
+.unit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.unit-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.unit-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unit-remove-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.unit-remove-btn:hover { color: #dc2626; background: #fef2f2; }
+
+.unit-toggle {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.unit-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.admin-add-unit-btn {
+  width: 100%;
+  padding: 11px;
+  background: none;
+  border: 1.5px dashed #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #64748b;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.admin-add-unit-btn:hover { border-color: #9333EA; color: #7C3AED; }
+
 /* Error box */
 .admin-error-box {
   background: #fef2f2;

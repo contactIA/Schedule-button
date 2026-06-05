@@ -1,8 +1,9 @@
-// Chama o handler Vercel /api/clinicorp que usa as credenciais do Supabase
-// pelo idconta recebido na URL.
+// Chama o handler Vercel /api/clinicorp que usa as credenciais da unit no Supabase.
 
-export async function fetchClinicorpSlots(date, idconta) {
-  const res = await fetch(`/api/clinicorp?date=${date}&idconta=${idconta}`)
+export async function fetchClinicorpSlots(date, idconta, unitId) {
+  const params = new URLSearchParams({ date, idconta })
+  if (unitId) params.set('unitId', unitId)
+  const res = await fetch(`/api/clinicorp?${params}`)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar horários (HTTP ${res.status})`)
@@ -10,8 +11,10 @@ export async function fetchClinicorpSlots(date, idconta) {
   return res.json()
 }
 
-export async function scheduleClinicorp(payload, idconta) {
-  const res = await fetch(`/api/clinicorp?idconta=${idconta}`, {
+export async function scheduleClinicorp(payload, idconta, unitId) {
+  const params = new URLSearchParams({ idconta })
+  if (unitId) params.set('unitId', unitId)
+  const res = await fetch(`/api/clinicorp?${params}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
