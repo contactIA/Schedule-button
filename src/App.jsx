@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, addContactTags, getPanelData
+  updateCardStep, addCardNote, addContactTags, getPanelData, getTags
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
 import { AGENDADO_STEP_NAME } from './config'
