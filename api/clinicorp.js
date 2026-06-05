@@ -63,6 +63,8 @@ export default async function handler(req, res) {
     const date = req.query?.date
     if (!date) return res.status(400).json({ error: 'Parâmetro date obrigatório (YYYY-MM-DD)' })
 
+    console.log('[Clinicorp GET] config:', { subscriberId, businessId, codeLink, date })
+
     try {
       const url = `${BASE}/appointment/get_avaliable_times_calendar?subscriber_id=${subscriberId}&code_link=${codeLink}&date=${date}`
       const { ok, status, body } = await clinicorpFetch(url, auth)
