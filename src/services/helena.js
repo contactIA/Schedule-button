@@ -40,20 +40,37 @@ export async function findCardByContact(contactId, idconta) {
   return null
 }
 
-// Retorna as etapas do painel CRC.
-// Usa v2 com IncludeDetails=Steps — único endpoint que retorna steps com title.
-export async function getPanelSteps(panelId, idconta) {
-  const qs = new URLSearchParams({ IncludeDetails: 'Steps', PageSize: '100' })
+// Retorna etapas E tags do painel em uma única chamada.
+// IncludeDetails=Steps,Tags garante que ambos venham na resposta.
+export async function getPanelData(panelId, idconta) {
+  const qs = new URLSearchParams({ PageSize: '100' })
+  qs.append('IncludeDetails', 'Steps')
+  qs.append('IncludeDetails', 'Tags')
   const res = await proxyFetch(`/crm/v2/panel?${qs}`, idconta)
-  if (!res.ok) throw new Error('Erro ao buscar etapas do painel')
-  const json = await res.json()
+  if (!res.ok) throw new Error('Erro ao buscar dados do painel')
+  const json   = await res.json()
   const panels = json.items ?? []
   const panel  = panels.find(p => p.id === panelId) ?? panels[0]
   if (!panel) throw new Error('Painel não encontrado')
-  return (panel.steps ?? [])
+
+  const steps = (panel.steps ?? [])
     .filter(s => !s.archived)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map(s => ({ id: s.id, name: s.title ?? s.name ?? '' }))
+
+  const tags = (panel.tags ?? []).map(t => ({
+    id:     t.id,
+    label:  t.name ?? t.title ?? '',
+    locked: false,
+  }))
+
+  return { steps, tags }
+}
+
+// Mantido por compatibilidade — usa getPanelData internamente
+export async function getPanelSteps(panelId, idconta) {
+  const { steps } = await getPanelData(panelId, idconta)
+  return steps
 }
 
 export async function updateCardStep(cardId, stepId, idconta, dueDate = null) {

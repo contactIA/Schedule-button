@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, addContactTags, getPanelSteps, getTags
+  updateCardStep, addCardNote, addContactTags, getPanelData
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
 import { AGENDADO_STEP_NAME } from './config'
@@ -58,10 +58,12 @@ function App() {
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
 
   // Config da clínica (carregada do Supabase via /api/clinic)
-  const [idconta,      setIdconta]      = useState(null)
-  const [clinicConfig, setClinicConfig] = useState(null)  // { name, panelId, agendadoStepId, tags, professionals }
+  const [idconta,       setIdconta]       = useState(null)
+  const [clinicConfig,  setClinicConfig]  = useState(null)
   const [clinicLoading, setClinicLoading] = useState(true)
   const [clinicNotFound, setClinicNotFound] = useState(false)
+  // true enquanto dados secundários (steps, contato) ainda estão carregando
+  const [dataLoading,   setDataLoading]   = useState(false)
 
   const [uiStep, setUiStep] = useState(1)
 
@@ -129,51 +131,49 @@ function App() {
 
         setClinicConfig(config)
         setClinicLoading(false)
+        setDataLoading(true)
 
-        // Se o banco não tiver tags salvas, busca em tempo real via proxy
-        if (!config.tags || config.tags.length === 0) {
-          getTags(conta).then(fetchedTags => {
-            if (fetchedTags.length > 0) {
-              setClinicConfig(prev => ({ ...prev, tags: fetchedTags }))
-              const agendadoTag = fetchedTags.find(t => t.label?.toLowerCase().includes('agendado'))
+        // 2. Carrega painel (steps + tags) em paralelo com dados do contato
+        const loadPanel = getPanelData(config.panelId, conta)
+          .then(({ steps, tags }) => {
+            setSteps(steps)
+            if (steps.length > 0) setSelectedStepId(steps[0].id)
+
+            // Merge: prefere tags do banco, usa as do painel como fallback
+            const finalTags = (config.tags?.length > 0) ? config.tags : tags
+            if (finalTags.length > 0) {
+              setClinicConfig(prev => ({ ...prev, tags: finalTags }))
+              const agendadoTag = finalTags.find(t => t.label?.toLowerCase().includes('agendado'))
               if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
             }
-          }).catch(() => {})
-        } else {
-          const agendadoTag = config.tags.find(t => t.label?.toLowerCase().includes('agendado'))
-          if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
-        }
-
-        // 2. Carrega etapas em paralelo com dados do contato
-        const loadSteps = getPanelSteps(config.panelId, conta)
-          .then(data => {
-            setSteps(data)
-            if (data.length > 0) setSelectedStepId(data[0].id)
           })
           .catch(err => {
-            console.error('Erro ao carregar etapas:', err)
-            setMessage({ type: 'error', text: `Erro ao carregar etapas do painel: ${err.message}` })
+            console.error('Erro ao carregar painel:', err)
+            setMessage({ type: 'error', text: `Erro ao carregar etapas: ${err.message}` })
           })
           .finally(() => setStepsLoading(false))
 
-        if (!cid) return loadSteps
+        const tasks = [loadPanel]
 
-        setContactId(cid)
-        Promise.all([
-          loadSteps,
-          getContact(cid, conta)
-            .then(data => {
-              if (data?.name) setNome(data.name)
-              const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
-              const priv  = isPhonePrivate(phone)
-              setPhonePrivate(priv)
-              if (!priv) setTelefone(stripCountryCode(phone))
-            })
-            .catch(err => console.warn('Erro ao carregar contato:', err)),
-          findCardByContact(cid, conta)
-            .then(card => { if (card) setExistingCard(card) })
-            .catch(() => null),
-        ])
+        if (cid) {
+          setContactId(cid)
+          tasks.push(
+            getContact(cid, conta)
+              .then(data => {
+                if (data?.name) setNome(data.name)
+                const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
+                const priv  = isPhonePrivate(phone)
+                setPhonePrivate(priv)
+                if (!priv) setTelefone(stripCountryCode(phone))
+              })
+              .catch(err => console.warn('Erro ao carregar contato:', err)),
+            findCardByContact(cid, conta)
+              .then(card => { if (card) setExistingCard(card) })
+              .catch(() => null)
+          )
+        }
+
+        Promise.all(tasks).finally(() => setDataLoading(false))
       })
       .catch(err => {
         console.error('Erro ao carregar config da clínica:', err)
@@ -307,7 +307,7 @@ function App() {
 
   const phoneInvalid = phonePrivate && !telefone.trim()
 
-  // ── Loading da clínica ────────────────────────────────────────
+  // ── Loading inicial da clínica ────────────────────────────────
   if (clinicLoading) {
     return (
       <div className="page">
@@ -326,6 +326,12 @@ function App() {
 
   return (
     <div className="page">
+      {dataLoading && (
+        <div className="data-loading-overlay">
+          <span className="spinner spinner-dark" />
+          <span>Carregando dados...</span>
+        </div>
+      )}
       <header className="header">
         <div className="brand">
           <div className="brand-mark"><span className="brand-initials">S</span></div>
