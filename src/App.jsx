@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import {
   createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, addContactTags, getPanelData, getTags
+  updateCardStep, addCardNote, getPanelData
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
 import { AGENDADO_STEP_NAME } from './config'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
-import TagChips from './components/TagChips'
 import { toDateStr } from './utils/date'
 import './App.css'
 
@@ -72,7 +71,6 @@ function App() {
   const [telefone,     setTelefone]     = useState('')
   const [phonePrivate, setPhonePrivate] = useState(false)
   const [descricao,    setDescricao]    = useState('')
-  const [tagIds,       setTagIds]       = useState(new Set())
 
   // Unidade selecionada
   const [selectedUnitId, setSelectedUnitId] = useState(null)
@@ -140,17 +138,6 @@ function App() {
         setClinicLoading(false)
         setDataLoading(true)
 
-        // 2. Carrega painel (steps + tags) em paralelo com dados do contato
-        // Tags globais do workspace (independentes do painel)
-        const loadTags = getTags(conta)
-          .then(fetchedTags => {
-            if (fetchedTags.length > 0) {
-              setClinicConfig(prev => ({ ...prev, tags: fetchedTags }))
-              const agendadoTag = fetchedTags.find(t => t.label?.toLowerCase().includes('agendado'))
-              if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
-            }
-          })
-          .catch(() => {})
 
         // Unidade padrão (primeira) — seleciona e carrega seus steps
         const defaultUnit = config.units?.[0] ?? null
@@ -176,7 +163,7 @@ function App() {
           })
           .finally(() => setStepsLoading(false))
 
-        const tasks = [loadTags, loadPanel]
+        const tasks = [loadPanel]
 
         if (cid) {
           setContactId(cid)
@@ -233,16 +220,6 @@ function App() {
     setSelectedSlot(null)
   }
 
-  const toggleTag = (tagId) => {
-    const lockedTag = clinicConfig?.tags?.find(t => t.id === tagId && t.locked)
-    if (lockedTag) return
-    setTagIds(prev => {
-      const next = new Set(prev)
-      next.has(tagId) ? next.delete(tagId) : next.add(tagId)
-      return next
-    })
-  }
-
   const handleNext = (e) => {
     e.preventDefault()
     if (!nome.trim()) return
@@ -274,10 +251,6 @@ function App() {
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
         await createCard(selectedStepId, clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
-      }
-
-      if (contactId && tagIds.size > 0) {
-        await addContactTags(contactId, Array.from(tagIds), idconta)
       }
 
       let clinicorpStatus = null
@@ -318,8 +291,6 @@ function App() {
       setDescricao('')
       setExistingCard(null)
       if (steps.length > 0) setSelectedStepId(steps[0].id)
-      const agendadoTag = clinicConfig?.tags?.find(t => t.label?.toLowerCase().includes('agendado'))
-      setTagIds(agendadoTag ? new Set([agendadoTag.id]) : new Set())
       setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
@@ -345,7 +316,6 @@ function App() {
   if (clinicNotFound) return <NoClinic />
 
   const professionals = clinicConfig?.professionals ?? []
-  const tagList       = clinicConfig?.tags ?? []
 
   return (
     <div className="page">
@@ -496,11 +466,6 @@ function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>Etiquetas do Contato</label>
-                    <TagChips tagIds={tagIds} onToggle={toggleTag} tagList={tagList} />
-                  </div>
-
-                  <div className="form-group">
                     <label>Observações</label>
                     <textarea
                       value={descricao}
@@ -563,7 +528,10 @@ function App() {
               </div>
 
               {selectedSlot && (() => {
-                const prof = professionals.find(p => p.id === selectedSlot.professionalId)
+                const prof = professionals.find(p =>
+                  String(p.clinicorp_id) === selectedSlot.professionalId ||
+                  p.id === selectedSlot.professionalId
+                )
                 return (
                   <div className="slot-summary">
                     ✓ {selectedDate} às {selectedSlot.from}

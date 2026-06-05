@@ -46,9 +46,11 @@ async function createPatient(name, phone, auth, subscriberId) {
 async function resolveUnit(idconta, unitId) {
   if (unitId) {
     const unit = await getUnitById(unitId)
-    if (unit) return unit
+    // Unidade inativa ou não encontrada → erro explícito, não fallback silencioso
+    if (!unit) throw new Error(`Unidade ${unitId} não encontrada ou inativa.`)
+    return unit
   }
-  // Fallback: primeira unidade ativa da clínica
+  // Sem unitId → usa a primeira unidade ativa da clínica
   const clinic = await getClinicByAccountId(idconta)
   if (!clinic?.units?.length) throw new Error('Nenhuma unidade configurada para esta clínica.')
   return clinic.units[0]

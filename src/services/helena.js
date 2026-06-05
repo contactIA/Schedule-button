@@ -11,17 +11,6 @@ async function proxyFetch(path, idconta, options = {}) {
   })
 }
 
-// Busca etiquetas do workspace — usado como fallback quando o banco não tem helena_tags
-export async function getTags(idconta) {
-  const res = await proxyFetch('/core/v1/tag/list', idconta)
-  if (!res.ok) return []
-  const json = await res.json()
-  return (Array.isArray(json) ? json : (json.items ?? [])).map(t => ({
-    id:     t.id,
-    label:  t.name ?? t.label ?? t.title ?? '',
-    locked: false,
-  }))
-}
 
 export async function getContact(contactId, idconta) {
   const res = await proxyFetch(`/core/v1/contact/${contactId}`, idconta)
@@ -53,10 +42,7 @@ export async function getPanelData(panelId, idconta) {
   const panel  = panels.find(p => p.id === panelId) ?? panels[0]
   if (!panel) throw new Error('Painel não encontrado')
 
-  const rawSteps = panel.steps ?? []
-  if (rawSteps.length > 0) console.log('[getPanelData] step sample:', JSON.stringify(rawSteps[0]))
-
-  const steps = rawSteps
+  const steps = (panel.steps ?? [])
     .filter(s => !s.archived)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map(s => ({
@@ -73,11 +59,6 @@ export async function getPanelData(panelId, idconta) {
   return { steps, tags }
 }
 
-// Mantido por compatibilidade — usa getPanelData internamente
-export async function getPanelSteps(panelId, idconta) {
-  const { steps } = await getPanelData(panelId, idconta)
-  return steps
-}
 
 export async function updateCardStep(cardId, stepId, idconta, dueDate = null) {
   const fields = ['stepId']
