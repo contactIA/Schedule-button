@@ -53,10 +53,16 @@ export async function getPanelData(panelId, idconta) {
   const panel  = panels.find(p => p.id === panelId) ?? panels[0]
   if (!panel) throw new Error('Painel não encontrado')
 
-  const steps = (panel.steps ?? [])
+  const rawSteps = panel.steps ?? []
+  if (rawSteps.length > 0) console.log('[getPanelData] step sample:', JSON.stringify(rawSteps[0]))
+
+  const steps = rawSteps
     .filter(s => !s.archived)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map(s => ({ id: s.id, name: s.title ?? s.name ?? '' }))
+    .map(s => ({
+      id:   s.id,
+      name: s.title ?? s.name ?? s.stepName ?? s.columnName ?? s.label ?? ''
+    }))
 
   const tags = (panel.tags ?? []).map(t => ({
     id:     t.id,

@@ -156,10 +156,12 @@ function App() {
         const defaultUnit = config.units?.[0] ?? null
         if (defaultUnit) setSelectedUnitId(defaultUnit.id)
 
-        // Steps vêm do banco (unit ou clínica); só busca da API se estiver vazio
-        const cachedSteps = defaultUnit?.steps?.length
+        // Steps vêm do banco se disponíveis e com nomes válidos
+        const rawCached = defaultUnit?.steps?.length
           ? defaultUnit.steps
           : config.steps ?? []
+        // Descarta cache se os nomes estiverem vazios (registro incompleto)
+        const cachedSteps = rawCached.filter(s => s.name?.trim())
 
         const loadPanel = (cachedSteps.length > 0
           ? Promise.resolve({ steps: cachedSteps })
