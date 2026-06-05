@@ -12,24 +12,26 @@ async function helenaGet(path, token) {
   catch { return { ok: false, status: res.status, body: { error: text } } }
 }
 
-// Tenta extrair o accountId (idconta) da conta Helena.
-// Tenta GET /core/v1/account e fallback em GET /core/v1/agent.
+// Extrai o companyId da conta Helena — é o valor que Helena envia como ?idconta= na URL.
+// O companyId aparece em qualquer resposta da API (painéis, cards, etc.).
 async function fetchHelenaAccountId(token) {
-  // Tenta endpoint de conta
-  const { ok, body } = await helenaGet('/core/v1/account', token)
-  if (ok && body?.id) return String(body.id)
-  if (ok && body?.accountId) return String(body.accountId)
+  // Estratégia 1: busca painéis e extrai companyId do primeiro
+  const { ok, body } = await helenaGet('/crm/v2/panel?PageSize=1', token)
+  if (ok) {
+    const items = body.items ?? []
+    if (items.length > 0 && items[0].companyId) return String(items[0].companyId)
+  }
 
-  // Fallback: lista de agentes — extrai workspaceId do primeiro agente
+  // Estratégia 2: lista agentes e extrai companyId
   const { ok: okAgent, body: agentBody } = await helenaGet('/core/v1/agent', token)
   const agents = Array.isArray(agentBody) ? agentBody : (agentBody?.items ?? [])
   if (okAgent && agents.length > 0) {
     const a = agents[0]
-    const id = a.accountId ?? a.workspaceId ?? a.tenantId ?? a.organizationId ?? null
+    const id = a.companyId ?? a.accountId ?? a.workspaceId ?? null
     if (id) return String(id)
   }
 
-  return null  // não conseguiu auto-detectar
+  return null
 }
 
 // panelId já vem escolhido pelo admin no formulário
