@@ -32,24 +32,15 @@ async function fetchHelenaAccountId(token) {
   return null  // não conseguiu auto-detectar
 }
 
+// panelId já vem escolhido pelo admin no formulário
 async function fetchHelenaConfig(token) {
-  const { ok: okPanels, body: panelsBody } = await helenaGet('/crm/v1/panel', token)
-  if (!okPanels) throw new Error(`Erro ao buscar painéis Helena: ${JSON.stringify(panelsBody)}`)
-
-  const panels = Array.isArray(panelsBody) ? panelsBody : (panelsBody.items ?? [])
-  if (panels.length === 0) throw new Error('Nenhum painel encontrado na conta Helena.')
-
-  const panelId = panels[0].id
-
-  // Busca tags do workspace
   const { body: tagsBody } = await helenaGet('/core/v1/tag/list', token)
   const tags = (Array.isArray(tagsBody) ? tagsBody : (tagsBody.items ?? [])).map(t => ({
     id:     t.id,
     label:  t.name ?? t.label ?? t.title ?? '',
     locked: false,
   }))
-
-  return { panelId, tags }
+  return { tags }
 }
 
 async function clinicorpGet(path, auth) {
@@ -87,7 +78,7 @@ async function fetchClinicorpConfig(user, token, subscriberId) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { clinicName, slug, helenaToken, agendadoStepId, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
+  const { clinicName, slug, helenaToken, helenaPanelId, agendadoStepId, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
   // subscriberId pode ser CNPJ ou o próprio usuário da API — fallback para o usuário
   const subscriberId = (req.body?.subscriberId || clinicorpUser || '').trim()
 
@@ -126,7 +117,7 @@ export default async function handler(req, res) {
         slug,
         name:                    clinicName,
         helena_token:            helenaToken,
-        helena_panel_id:         helenaConfig.panelId,
+        helena_panel_id:         helenaPanelId,
         helena_agendado_step_id: agendadoStepId,
         helena_tags:             helenaConfig.tags,
         helena_account_id:       accountId ?? null,

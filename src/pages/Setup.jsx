@@ -182,10 +182,14 @@ function AdminForm({ onSuccess }) {
   const [slug, setSlug] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [helenaToken, setHelenaToken] = useState('')
-  const [helenaSteps, setHelenaSteps] = useState([])       // etapas carregadas do painel
-  const [agendadoStepId, setAgendadoStepId] = useState('') // etapa escolhida pelo admin
-  const [stepsLoading, setStepsLoading] = useState(false)
-  const [stepsError, setStepsError] = useState('')
+  const [helenaPanels, setHelenaPanels]   = useState([])   // painéis carregados
+  const [selectedPanelId, setSelectedPanelId] = useState('')
+  const [agendadoStepId, setAgendadoStepId]   = useState('')
+  const [stepsLoading, setStepsLoading]   = useState(false)
+  const [stepsError,   setStepsError]     = useState('')
+
+  // Etapas do painel selecionado
+  const panelSteps = helenaPanels.find(p => p.id === selectedPanelId)?.steps ?? []
   const [clinicorpUser, setClinicorpUser] = useState('')
   const [clinicorpToken, setClinicorpToken] = useState('')
   const [subscriberId, setSubscriberId] = useState('')
@@ -205,14 +209,19 @@ function AdminForm({ onSuccess }) {
     if (!helenaToken.trim()) return
     setStepsLoading(true)
     setStepsError('')
-    setHelenaSteps([])
+    setHelenaPanels([])
+    setSelectedPanelId('')
     setAgendadoStepId('')
     try {
       const res = await fetch(`/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}&_t=${Date.now()}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
-      setHelenaSteps(data.steps ?? [])
-      if (data.steps?.length > 0) setAgendadoStepId(data.steps[0].id)
+      const panels = data.panels ?? []
+      setHelenaPanels(panels)
+      if (panels.length > 0) {
+        setSelectedPanelId(panels[0].id)
+        if (panels[0].steps?.length > 0) setAgendadoStepId(panels[0].steps[0].id)
+      }
     } catch (err) {
       setStepsError(err.message)
     } finally {
@@ -235,7 +244,7 @@ function AdminForm({ onSuccess }) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicName, slug, helenaToken, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
+        body: JSON.stringify({ clinicName, slug, helenaToken, helenaPanelId: selectedPanelId, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
@@ -354,9 +363,9 @@ function AdminForm({ onSuccess }) {
               >
                 {stepsLoading
                   ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Buscando etapas...</span>
-                  : helenaSteps.length > 0
-                    ? '✓ Etapas carregadas — clique para recarregar'
-                    : '🔍 Verificar token e carregar etapas'}
+                  : helenaPanels.length > 0
+                    ? '✓ Painéis carregados — clique para recarregar'
+                    : '🔍 Verificar token e carregar painéis'}
               </button>
               {!helenaToken.trim() && (
                 <span className="admin-field-hint">Preencha o token acima para habilitar.</span>
@@ -364,23 +373,46 @@ function AdminForm({ onSuccess }) {
               {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>⚠ {stepsError}</span>}
             </div>
 
-            {helenaSteps.length > 0 && (
-              <div className="admin-field">
-                <label>Qual etapa aciona o calendário do Clinicorp? *</label>
-                <select
-                  value={agendadoStepId}
-                  onChange={e => setAgendadoStepId(e.target.value)}
-                  required
-                  style={{ width:'100%', padding:'11px 14px', border:'1.5px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', fontFamily:'inherit' }}
-                >
-                  {helenaSteps.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-                <span className="admin-field-hint">
-                  Quando o operador selecionar esta etapa, o calendário do Clinicorp será exibido.
-                </span>
-              </div>
+            {helenaPanels.length > 0 && (
+              <>
+                <div className="admin-field">
+                  <label>Painel CRC (destino dos cards) *</label>
+                  <select
+                    value={selectedPanelId}
+                    onChange={e => {
+                      setSelectedPanelId(e.target.value)
+                      const panel = helenaPanels.find(p => p.id === e.target.value)
+                      setAgendadoStepId(panel?.steps?.[0]?.id ?? '')
+                    }}
+                    className="step-select"
+                    required
+                  >
+                    {helenaPanels.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                  <span className="admin-field-hint">Cards serão criados neste painel.</span>
+                </div>
+
+                {panelSteps.length > 0 && (
+                  <div className="admin-field">
+                    <label>Etapa que aciona o calendário do Clinicorp *</label>
+                    <select
+                      value={agendadoStepId}
+                      onChange={e => setAgendadoStepId(e.target.value)}
+                      className="step-select"
+                      required
+                    >
+                      {panelSteps.map(s => (
+                        <option key={s.id} value={s.id}>{s.title}</option>
+                      ))}
+                    </select>
+                    <span className="admin-field-hint">
+                      Quando o operador selecionar esta etapa, o calendário do Clinicorp abrirá.
+                    </span>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="admin-actions">

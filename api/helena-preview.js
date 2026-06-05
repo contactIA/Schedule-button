@@ -9,8 +9,8 @@ async function helenaGet(path, token) {
   catch { return { ok: false, status: res.status, body: { error: text } } }
 }
 
+// Retorna todos os painéis com suas etapas usando a API v2 correta.
 export default async function handler(req, res) {
-  // Desabilita cache para sempre retornar dados frescos
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   res.setHeader('Pragma', 'no-cache')
 
@@ -20,50 +20,32 @@ export default async function handler(req, res) {
   if (!token) return res.status(400).json({ error: 'Parâmetro token obrigatório' })
 
   try {
-    // 1. Lista painéis
-    const { ok, body: panelsBody } = await helenaGet('/crm/v1/panel', token)
-    if (!ok) return res.status(400).json({ error: `Token inválido ou sem acesso. Resposta: ${JSON.stringify(panelsBody).slice(0, 200)}` })
+    // v2/panel com IncludeDetails=Steps retorna painéis + etapas em uma única chamada
+    const { ok, body } = await helenaGet(
+      '/crm/v2/panel?IncludeDetails=Steps&PageSize=100', token
+    )
 
-    const panels = Array.isArray(panelsBody) ? panelsBody : (panelsBody.items ?? panelsBody.data ?? [])
-    if (panels.length === 0) return res.status(400).json({ error: 'Nenhum painel encontrado nesta conta Helena.' })
+    if (!ok) {
+      return res.status(400).json({
+        error: `Token inválido ou sem acesso. (${JSON.stringify(body).slice(0, 200)})`
+      })
+    }
 
-    const panel   = panels[0]
-    const panelId = panel.id
+    const panels = (body.items ?? []).map(panel => ({
+      id:    panel.id,
+      title: panel.title ?? panel.name ?? '',
+      steps: (panel.steps ?? [])
+        .filter(s => !s.archived)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map(s => ({ id: s.id, title: s.title ?? '' }))
+    }))
 
-    // 2. Busca detalhes do painel (etapas)
-    const { ok: okPanel, body: panelData } = await helenaGet(`/crm/v1/panel/${panelId}`, token)
+    if (panels.length === 0) {
+      return res.status(400).json({ error: 'Nenhum painel encontrado nesta conta Helena.' })
+    }
 
-    // Log completo para diagnóstico
-    console.log('[helena-preview] panelData keys:', Object.keys(panelData ?? {}))
-    console.log('[helena-preview] panelData sample:', JSON.stringify(panelData).slice(0, 500))
+    return res.status(200).json({ panels, totalPanels: body.totalItems ?? panels.length })
 
-    if (!okPanel) return res.status(400).json({ error: 'Erro ao buscar etapas do painel.' })
-
-    // Tenta todas as chaves possíveis que a API Helena pode usar para etapas
-    const rawSteps =
-      panelData.steps ??
-      panelData.columns ??
-      panelData.stepList ??
-      panelData.stages ??
-      panelData.kanbanColumns ??
-      panelData.data ??
-      (Array.isArray(panelData) ? panelData : [])
-
-    console.log('[helena-preview] rawSteps encontrados:', rawSteps.length)
-
-    const steps = rawSteps
-      .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0))
-      .map(s => ({
-        id:   s.id,
-        name: s.name ?? s.title ?? s.label ?? s.columnName ?? `Etapa ${s.id}`
-      }))
-
-    return res.status(200).json({
-      panelId,
-      panelName: panel.name ?? panel.title ?? '',
-      steps,
-      _debug: { totalPanels: panels.length, panelKeys: Object.keys(panelData ?? {}) }
-    })
   } catch (err) {
     console.error('[helena-preview]', err.message)
     return res.status(500).json({ error: err.message })
