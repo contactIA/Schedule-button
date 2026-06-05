@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, addContactTags, getPanelSteps
+  updateCardStep, addCardNote, addContactTags, getPanelSteps, getTags
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
 import { AGENDADO_STEP_NAME } from './config'
@@ -130,11 +130,19 @@ function App() {
         setClinicConfig(config)
         setClinicLoading(false)
 
-        // Inicializa tags com "Agendado" se disponível
-        const agendadoTag = config.tags?.find(t =>
-          t.label?.toLowerCase().includes('agendado')
-        )
-        if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
+        // Se o banco não tiver tags salvas, busca em tempo real via proxy
+        if (!config.tags || config.tags.length === 0) {
+          getTags(conta).then(fetchedTags => {
+            if (fetchedTags.length > 0) {
+              setClinicConfig(prev => ({ ...prev, tags: fetchedTags }))
+              const agendadoTag = fetchedTags.find(t => t.label?.toLowerCase().includes('agendado'))
+              if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
+            }
+          }).catch(() => {})
+        } else {
+          const agendadoTag = config.tags.find(t => t.label?.toLowerCase().includes('agendado'))
+          if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
+        }
 
         // 2. Carrega etapas em paralelo com dados do contato
         const loadSteps = getPanelSteps(config.panelId, conta)
@@ -142,7 +150,10 @@ function App() {
             setSteps(data)
             if (data.length > 0) setSelectedStepId(data[0].id)
           })
-          .catch(err => console.warn('Erro ao carregar etapas:', err))
+          .catch(err => {
+            console.error('Erro ao carregar etapas:', err)
+            setMessage({ type: 'error', text: `Erro ao carregar etapas do painel: ${err.message}` })
+          })
           .finally(() => setStepsLoading(false))
 
         if (!cid) return loadSteps

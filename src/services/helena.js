@@ -11,6 +11,18 @@ async function proxyFetch(path, idconta, options = {}) {
   })
 }
 
+// Busca etiquetas do workspace — usado como fallback quando o banco não tem helena_tags
+export async function getTags(idconta) {
+  const res = await proxyFetch('/core/v1/tag/list', idconta)
+  if (!res.ok) return []
+  const json = await res.json()
+  return (Array.isArray(json) ? json : (json.items ?? [])).map(t => ({
+    id:     t.id,
+    label:  t.name ?? t.label ?? t.title ?? '',
+    locked: false,
+  }))
+}
+
 export async function getContact(contactId, idconta) {
   const res = await proxyFetch(`/core/v1/contact/${contactId}`, idconta)
   if (!res.ok) throw new Error('Contato não encontrado')
@@ -28,15 +40,20 @@ export async function findCardByContact(contactId, idconta) {
   return null
 }
 
-// Retorna as etapas do painel CRC para popular o dropdown
+// Retorna as etapas do painel CRC.
+// Usa v2 com IncludeDetails=Steps — único endpoint que retorna steps com title.
 export async function getPanelSteps(panelId, idconta) {
-  const res = await proxyFetch(`/crm/v1/panel/${panelId}`, idconta)
+  const qs = new URLSearchParams({ IncludeDetails: 'Steps', PageSize: '100' })
+  const res = await proxyFetch(`/crm/v2/panel?${qs}`, idconta)
   if (!res.ok) throw new Error('Erro ao buscar etapas do painel')
   const json = await res.json()
-  const steps = json.steps ?? json.columns ?? []
-  return steps
+  const panels = json.items ?? []
+  const panel  = panels.find(p => p.id === panelId) ?? panels[0]
+  if (!panel) throw new Error('Painel não encontrado')
+  return (panel.steps ?? [])
+    .filter(s => !s.archived)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map(s => ({ id: s.id, name: s.name ?? s.title ?? '' }))
+    .map(s => ({ id: s.id, name: s.title ?? s.name ?? '' }))
 }
 
 export async function updateCardStep(cardId, stepId, idconta, dueDate = null) {
