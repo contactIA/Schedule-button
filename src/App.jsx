@@ -75,10 +75,10 @@ function App() {
   // Unidade selecionada
   const [selectedUnitId, setSelectedUnitId] = useState(null)
 
-  // Etapas do painel CRC (da unidade ou da clínica)
+  // Steps mantidos internamente para contexto; seleção de etapa arquivada.
+  // Para restaurar o seletor de etapa: git checkout archive/multi-step-selector
   const [steps,        setSteps]        = useState([])
   const [stepsLoading, setStepsLoading] = useState(true)
-  const [selectedStepId, setSelectedStepId] = useState('')
 
   // Contato / card
   const [contactId,    setContactId]    = useState(null)
@@ -102,13 +102,8 @@ function App() {
     ?? clinicConfig?.units?.[0]
     ?? null
 
-  // A etapa selecionada aciona o Clinicorp usando o agendadoStepId da unidade ativa (ou da clínica)
+  // O botão serve exclusivamente para agendamentos — usa sempre o agendadoStepId
   const effectiveAgendadoStepId = activeUnit?.agendadoStepId ?? clinicConfig?.agendadoStepId
-  const isAgendadoStep = selectedStepId
-    ? effectiveAgendadoStepId
-      ? selectedStepId === effectiveAgendadoStepId
-      : (steps.find(s => s.id === selectedStepId)?.name ?? '').toLowerCase().includes(AGENDADO_STEP_NAME)
-    : false
 
   // ── Inicialização ─────────────────────────────────────────────
   useEffect(() => {
@@ -155,7 +150,6 @@ function App() {
           : getPanelData(defaultUnit?.panelId ?? config.panelId, conta)
         ).then(({ steps }) => {
             setSteps(steps)
-            if (steps.length > 0) setSelectedStepId(steps[0].id)
           })
           .catch(err => {
             console.error('Erro ao carregar painel:', err)
@@ -224,7 +218,7 @@ function App() {
     e.preventDefault()
     if (!nome.trim()) return
     if (phonePrivate && !telefone.trim()) return
-    isAgendadoStep ? setUiStep(2) : handleSubmit()
+    setUiStep(2)
   }
 
   const handleSubmit = async (e) => {
@@ -234,8 +228,7 @@ function App() {
     setMessage(null)
 
     try {
-      const selectedStep = steps.find(s => s.id === selectedStepId)
-      const stepName     = selectedStep?.name ?? 'etapa selecionada'
+      const stepName = steps.find(s => s.id === effectiveAgendadoStepId)?.name ?? 'Agendado'
 
       let finalDescription = descricao.trim()
       if (selectedDate && selectedSlot) {
@@ -247,14 +240,14 @@ function App() {
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
 
       if (card) {
-        await updateCardStep(card.id, selectedStepId, idconta, dueDateTime)
+        await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime)
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(selectedStepId, clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
+        await createCard(effectiveAgendadoStepId, clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
       }
 
       let clinicorpStatus = null
-      if (isAgendadoStep && selectedDate && selectedSlot) {
+      if (selectedDate && selectedSlot) {
         try {
           await scheduleClinicorp({
             patientName:  nome.trim(),
@@ -290,7 +283,6 @@ function App() {
       setAvailableSlots([])
       setDescricao('')
       setExistingCard(null)
-      if (steps.length > 0) setSelectedStepId(steps[0].id)
       setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
@@ -440,33 +432,8 @@ function App() {
                 </div>
 
                 <div className="form-section">
-                  <span className="form-section-label">Card no CRM</span>
-
+                  <span className="form-section-label">Observações</span>
                   <div className="form-group">
-                    <label>Etapa de destino *</label>
-                    {stepsLoading ? (
-                      <div className="steps-loading">
-                        <span className="spinner spinner-dark" /> Carregando etapas...
-                      </div>
-                    ) : (
-                      <select
-                        value={selectedStepId}
-                        onChange={e => setSelectedStepId(e.target.value)}
-                        className="step-select"
-                        required
-                      >
-                        {steps.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    )}
-                    {isAgendadoStep && (
-                      <span className="field-hint">Calendário do Clinicorp será aberto no próximo passo.</span>
-                    )}
-                  </div>
-
-                  <div className="form-group">
-                    <label>Observações</label>
                     <textarea
                       value={descricao}
                       onChange={e => setDescricao(e.target.value)}
@@ -480,20 +447,18 @@ function App() {
                   <button
                     type="submit"
                     className="btn-primary"
-                    disabled={!nome.trim() || phoneInvalid || stepsLoading || !selectedStepId || loading}
+                    disabled={!nome.trim() || phoneInvalid || loading}
                   >
                     {loading
                       ? <span className="btn-loading"><span className="spinner" />Salvando...</span>
-                      : isAgendadoStep
-                        ? 'Próximo: Escolher Horário →'
-                        : existingCard ? 'Mover Card' : 'Criar Card'}
+                      : 'Próximo: Escolher Horário →'}
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* ── ETAPA 2: Calendário (só quando etapa é Agendado) ── */}
+          {/* ── ETAPA 2: Calendário Clinicorp ── */}
           {uiStep === 2 && (
             <div className="step-content">
               <div className="form-header">
