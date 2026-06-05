@@ -102,13 +102,12 @@ function App() {
     ?? clinicConfig?.units?.[0]
     ?? null
 
-  // Painel ativo: o selecionado pelo operador (ou o primeiro configurado)
-  const [selectedPanelId, setSelectedPanelId] = useState(null)
-  const activePanel = clinicConfig?.panels?.find(p => p.id === selectedPanelId)
+  // Painel ativo é derivado da unidade selecionada — sem seletor no runtime
+  // (unidade → panelId configurado no onboarding, ou painel padrão da clínica)
+  const activePanel = clinicConfig?.panels?.find(p => p.id === activeUnit?.panelId)
     ?? clinicConfig?.panels?.[0]
     ?? null
 
-  // O botão serve exclusivamente para agendamentos — usa sempre o agendadoStepId do painel ativo
   const effectiveAgendadoStepId = activeUnit?.agendadoStepId
     ?? activePanel?.agendadoStepId
     ?? clinicConfig?.agendadoStepId
@@ -142,11 +141,9 @@ function App() {
         setDataLoading(true)
 
 
-        // Seleciona unidade e painel padrão (primeiro de cada)
+        // Seleciona unidade padrão (primeira disponível)
         const defaultUnit = config.units?.[0] ?? null
         if (defaultUnit) setSelectedUnitId(defaultUnit.id)
-        const defaultPanel = config.panels?.[0] ?? null
-        if (defaultPanel) setSelectedPanelId(defaultPanel.id)
 
         // Steps vêm do banco se disponíveis e com nomes válidos
         const rawCached = defaultUnit?.steps?.length
@@ -377,25 +374,6 @@ function App() {
               </div>
 
               <form className="card-form" onSubmit={handleNext}>
-
-                {/* Seletor de painel — só aparece com 2+ painéis */}
-                {(clinicConfig?.panels?.length ?? 0) > 1 && (
-                  <div className="form-section">
-                    <span className="form-section-label">Painel</span>
-                    <div className="unit-selector">
-                      {clinicConfig.panels.map(panel => (
-                        <button
-                          key={panel.id}
-                          type="button"
-                          className={`unit-btn${selectedPanelId === panel.id ? ' unit-btn-active' : ''}`}
-                          onClick={() => setSelectedPanelId(panel.id)}
-                        >
-                          {panel.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Seletor de unidade — só aparece com 2+ unidades */}
                 {(clinicConfig?.units?.length ?? 0) > 1 && (
