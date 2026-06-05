@@ -268,7 +268,7 @@ function AdminForm({ onSuccess }) {
           helenaToken,
           helenaPanelId:   selectedPanelId,
           agendadoStepId,
-          helenaSteps:     panelSteps.map(s => ({ id: s.id, name: s.title ?? s.name ?? '' })),
+          helenaSteps:     panelSteps.map(s => ({ id: s.id, name: s.title || s.name || s.stepName || s.label || s.id })),
           units: units.map(u => ({
             name:            u.name,
             clinicorpUser:   u.clinicorpUser,

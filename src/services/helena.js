@@ -61,7 +61,7 @@ export async function getPanelData(panelId, idconta) {
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map(s => ({
       id:   s.id,
-      name: s.title ?? s.name ?? s.stepName ?? s.columnName ?? s.label ?? ''
+      name: s.title || s.name || s.stepName || s.columnName || s.label || s.id
     }))
 
   const tags = (panel.tags ?? []).map(t => ({

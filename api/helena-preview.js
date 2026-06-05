@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       steps: (panel.steps ?? [])
         .filter(s => !s.archived)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map(s => ({ id: s.id, title: s.title ?? '' }))
+        .map(s => ({ id: s.id, title: s.title || s.name || s.stepName || s.label || s.id }))
     }))
 
     if (panels.length === 0) {
