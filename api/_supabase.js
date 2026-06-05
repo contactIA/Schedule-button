@@ -14,14 +14,17 @@ function getSupabase() {
 export async function getClinicByAccountId(idconta) {
   const sb = getSupabase()
 
-  const { data: clinic, error } = await sb
+  const { data, error } = await sb
     .from('clinics')
     .select('*')
     .eq('helena_account_id', idconta)
     .eq('active', true)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
+    .limit(1)
 
   if (error) throw new Error(`Erro ao consultar banco: ${error.message}`)
+
+  const clinic = data?.[0] ?? null
   if (!clinic) return null
 
   // Busca profissionais separadamente
