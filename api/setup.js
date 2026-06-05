@@ -80,7 +80,7 @@ async function fetchClinicorpConfig(user, token, subscriberId) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { clinicName, slug, helenaToken, helenaPanelId, agendadoStepId, clinicorpUser, clinicorpToken, helenaAccountId } = req.body ?? {}
+  const { clinicName, slug, helenaToken, helenaPanelId, agendadoStepId, clinicorpUser, clinicorpToken, helenaAccountId, codeLink: codeLinkInput } = req.body ?? {}
   // subscriberId pode ser CNPJ ou o próprio usuário da API — fallback para o usuário
   const subscriberId = (req.body?.subscriberId || clinicorpUser || '').trim()
 
@@ -127,7 +127,8 @@ export default async function handler(req, res) {
         clinicorp_token:         clinicorpToken,
         clinicorp_subscriber_id: subscriberId,
         clinicorp_business_id:   clinicorpConfig.businessId,
-        clinicorp_code_link:     clinicorpConfig.codeLink,
+        // Usa codeLink informado pelo admin; fallback para o retornado pela API
+        clinicorp_code_link:     codeLinkInput ? Number(codeLinkInput) : clinicorpConfig.codeLink,
       })
       .select('id')
       .single()

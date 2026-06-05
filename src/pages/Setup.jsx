@@ -193,6 +193,7 @@ function AdminForm({ onSuccess }) {
   const [clinicorpUser, setClinicorpUser] = useState('')
   const [clinicorpToken, setClinicorpToken] = useState('')
   const [subscriberId, setSubscriberId] = useState('')
+  const [codeLink, setCodeLink] = useState('')
   const [submitError, setSubmitError] = useState('')
 
   const handleNameChange = (val) => {
@@ -244,7 +245,7 @@ function AdminForm({ onSuccess }) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicName, slug, helenaToken, helenaPanelId: selectedPanelId, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser }),
+        body: JSON.stringify({ clinicName, slug, helenaToken, helenaPanelId: selectedPanelId, agendadoStepId, clinicorpUser, clinicorpToken, subscriberId: subscriberId || clinicorpUser, codeLink: codeLink || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
@@ -454,6 +455,19 @@ function AdminForm({ onSuccess }) {
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 required
               />
+            </div>
+
+            <div className="admin-field">
+              <label>Code Link <span style={{fontWeight:400, color:'#94a3b8'}}>(opcional)</span></label>
+              <input
+                type="text"
+                value={codeLink}
+                onChange={e => setCodeLink(e.target.value.replace(/\D/g, ''))}
+                placeholder="Ex: 75094"
+              />
+              <span className="admin-field-hint">
+                Encontre em Sistema → Gerenciar Assinatura → Acesso Externo e Integrações. Se não informado, o sistema tenta buscar automaticamente.
+              </span>
             </div>
 
             <div className="admin-field">

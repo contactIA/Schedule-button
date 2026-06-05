@@ -127,10 +127,11 @@ export async function createCard(stepId, panelId, title, description, contactId,
 
 export async function addContactTags(contactId, tagIds, idconta) {
   if (!tagIds || tagIds.length === 0) return
+  // operation: InsertIfNotExists — adiciona sem remover as existentes
   const res = await proxyFetch(`/core/v1/contact/${contactId}/tags`, idconta, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tagIds })
+    body: JSON.stringify({ tagIds, operation: 'InsertIfNotExists' })
   })
   if (!res.ok) {
     const errText = await res.text().catch(() => '')

@@ -134,18 +134,21 @@ function App() {
         setDataLoading(true)
 
         // 2. Carrega painel (steps + tags) em paralelo com dados do contato
-        const loadPanel = getPanelData(config.panelId, conta)
-          .then(({ steps, tags }) => {
-            setSteps(steps)
-            if (steps.length > 0) setSelectedStepId(steps[0].id)
-
-            // Merge: prefere tags do banco, usa as do painel como fallback
-            const finalTags = (config.tags?.length > 0) ? config.tags : tags
-            if (finalTags.length > 0) {
-              setClinicConfig(prev => ({ ...prev, tags: finalTags }))
-              const agendadoTag = finalTags.find(t => t.label?.toLowerCase().includes('agendado'))
+        // Tags globais do workspace (independentes do painel)
+        const loadTags = getTags(conta)
+          .then(fetchedTags => {
+            if (fetchedTags.length > 0) {
+              setClinicConfig(prev => ({ ...prev, tags: fetchedTags }))
+              const agendadoTag = fetchedTags.find(t => t.label?.toLowerCase().includes('agendado'))
               if (agendadoTag) setTagIds(new Set([agendadoTag.id]))
             }
+          })
+          .catch(() => {})
+
+        const loadPanel = getPanelData(config.panelId, conta)
+          .then(({ steps }) => {
+            setSteps(steps)
+            if (steps.length > 0) setSelectedStepId(steps[0].id)
           })
           .catch(err => {
             console.error('Erro ao carregar painel:', err)
@@ -153,7 +156,7 @@ function App() {
           })
           .finally(() => setStepsLoading(false))
 
-        const tasks = [loadPanel]
+        const tasks = [loadTags, loadPanel]
 
         if (cid) {
           setContactId(cid)
