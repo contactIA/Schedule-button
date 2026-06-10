@@ -139,7 +139,6 @@ export default async function handler(req, res) {
     for (let i = 0; i < units.length; i++) {
       const u = units[i]
       const subscriberId = (u.subscriberId || u.clinicorpUser || '').trim()
-      const auth         = 'Basic ' + Buffer.from(`${u.clinicorpUser}:${u.clinicorpToken}`).toString('base64')
 
       // Se não tem businessId, busca automaticamente
       let businessId = u.businessId ? Number(u.businessId) : null
@@ -151,7 +150,7 @@ export default async function handler(req, res) {
           businessId = fetched.businessId
           if (!codeLink) codeLink = fetched.codeLink
         } catch (err) {
-          throw new Error(`Unidade "${u.name}": ${err.message}`)
+          throw new Error(`Unidade "${u.name}": ${err.message}`, { cause: err })
         }
       }
 

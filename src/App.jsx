@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   createCard, getContact, findCardByContact,
   updateCardStep, addCardNote, getPanelData
@@ -29,6 +29,11 @@ function stripCountryCode(phone) {
   return digits
 }
 
+// Parâmetros da URL — fixos durante toda a sessão
+const urlParams = new URLSearchParams(window.location.search)
+const idconta   = urlParams.get('idconta')
+const contactId = urlParams.get('contactid') || urlParams.get('contactId')
+
 // ── Tela sem clínica cadastrada ───────────────────────────────────
 function NoClinic() {
   return (
@@ -57,10 +62,9 @@ function App() {
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
 
   // Config da clínica (carregada do Supabase via /api/clinic)
-  const [idconta,       setIdconta]       = useState(null)
   const [clinicConfig,  setClinicConfig]  = useState(null)
-  const [clinicLoading, setClinicLoading] = useState(true)
-  const [clinicNotFound, setClinicNotFound] = useState(false)
+  const [clinicLoading, setClinicLoading] = useState(!!idconta)
+  const [clinicNotFound, setClinicNotFound] = useState(!idconta)
   // true enquanto dados secundários (steps, contato) ainda estão carregando
   const [dataLoading,   setDataLoading]   = useState(false)
 
@@ -85,7 +89,6 @@ function App() {
   const [selectedTagIds, setSelectedTagIds] = useState(new Set())
 
   // Contato / card
-  const [contactId,    setContactId]    = useState(null)
   const [existingCard, setExistingCard] = useState(null)
 
   // Calendário
@@ -116,22 +119,40 @@ function App() {
     ?? activePanel?.agendadoStepId
     ?? clinicConfig?.agendadoStepId
 
+  // ── Steps + etiquetas do painel de uma unidade ────────────────
+  // As etiquetas vivem no painel (não no banco), então sempre busca na API.
+  // Steps preferem o cache do banco quando os nomes são válidos.
+  const loadPanelData = useCallback((config, unitId) => {
+    const unit = config.units?.find(u => u.id === unitId)
+      ?? config.units?.[0]
+      ?? null
+    const panelId   = unit?.panelId ?? config.panelId
+    const rawCached = unit?.steps?.length ? unit.steps : config.steps ?? []
+    // Descarta cache se os nomes estiverem vazios (registro incompleto)
+    const cachedSteps = rawCached.filter(s => s.name?.trim())
+
+    setStepsLoading(true)
+    return getPanelData(panelId, idconta)
+      .then(({ steps: apiSteps, tags }) => {
+        setSteps(cachedSteps.length > 0 ? cachedSteps : apiSteps)
+        setPanelTags(tags)
+        // Mantém só as seleções que existem no painel atual
+        setSelectedTagIds(prev => new Set([...prev].filter(id => tags.some(t => t.id === id))))
+      })
+      .catch(err => {
+        console.error('Erro ao carregar painel:', err)
+        setPanelTags([])
+        if (cachedSteps.length > 0) setSteps(cachedSteps)
+        else setMessage({ type: 'error', text: `Erro ao carregar etapas: ${err.message}` })
+      })
+      .finally(() => setStepsLoading(false))
+  }, [setSteps, setPanelTags, setSelectedTagIds, setStepsLoading, setMessage])
+
   // ── Inicialização ─────────────────────────────────────────────
   useEffect(() => {
-    const params    = new URLSearchParams(window.location.search)
-    const conta     = params.get('idconta')
-    const cid       = params.get('contactid') || params.get('contactId')
+    if (!idconta) return
 
-    if (!conta) {
-      setClinicLoading(false)
-      setClinicNotFound(true)
-      return
-    }
-
-    setIdconta(conta)
-
-    // 1. Carrega config da clínica
-    fetch(`/api/clinic?idconta=${conta}`)
+    fetch(`/api/clinic?idconta=${idconta}`)
       .then(r => r.json())
       .then(config => {
         if (config.error === 'not_registered') {
@@ -148,12 +169,11 @@ function App() {
         const defaultUnit = config.units?.[0] ?? null
         if (defaultUnit) setSelectedUnitId(defaultUnit.id)
 
-        const tasks = []
+        const tasks = [loadPanelData(config, defaultUnit?.id)]
 
-        if (cid) {
-          setContactId(cid)
+        if (contactId) {
           tasks.push(
-            getContact(cid, conta)
+            getContact(contactId, idconta)
               .then(data => {
                 if (data?.name) setNome(data.name)
                 const phone = data?.phone || data?.phoneNumber || data?.mobilePhone || ''
@@ -162,7 +182,7 @@ function App() {
                 if (!priv) setTelefone(stripCountryCode(phone))
               })
               .catch(err => console.warn('Erro ao carregar contato:', err)),
-            findCardByContact(cid, conta)
+            findCardByContact(contactId, idconta)
               .then(card => { if (card) setExistingCard(card) })
               .catch(() => null)
           )
@@ -175,50 +195,18 @@ function App() {
         setClinicNotFound(true)
         setClinicLoading(false)
       })
-  }, [])
+  }, [loadPanelData])
 
-  // ── Steps + etiquetas do painel da unidade ativa ──────────────
-  // As etiquetas vivem no painel (não no banco), então sempre busca na API.
-  // Steps preferem o cache do banco quando os nomes são válidos.
-  useEffect(() => {
-    if (!idconta || !clinicConfig) return
-    const unit = clinicConfig.units?.find(u => u.id === selectedUnitId)
-      ?? clinicConfig.units?.[0]
-      ?? null
-    const panelId   = unit?.panelId ?? clinicConfig.panelId
-    const rawCached = unit?.steps?.length ? unit.steps : clinicConfig.steps ?? []
-    // Descarta cache se os nomes estiverem vazios (registro incompleto)
-    const cachedSteps = rawCached.filter(s => s.name?.trim())
-
-    setStepsLoading(true)
-    getPanelData(panelId, idconta)
-      .then(({ steps: apiSteps, tags }) => {
-        setSteps(cachedSteps.length > 0 ? cachedSteps : apiSteps)
-        setPanelTags(tags)
-        // Mantém só as seleções que existem no painel atual
-        setSelectedTagIds(prev => new Set([...prev].filter(id => tags.some(t => t.id === id))))
-      })
-      .catch(err => {
-        console.error('Erro ao carregar painel:', err)
-        setPanelTags([])
-        if (cachedSteps.length > 0) setSteps(cachedSteps)
-        else setMessage({ type: 'error', text: `Erro ao carregar etapas: ${err.message}` })
-      })
-      .finally(() => setStepsLoading(false))
-  }, [idconta, clinicConfig, selectedUnitId])
-
-  // ── Busca slots ao selecionar data ───────────────────────────
-  useEffect(() => {
-    if (!selectedDate || !idconta) return
+  // ── Busca slots ao escolher um dia no calendário ──────────────
+  const loadSlots = (dateStr) => {
     setSlotsLoading(true)
     setSlotsError(null)
-    setSelectedSlot(null)
     setAvailableSlots([])
-    fetchClinicorpSlots(selectedDate, idconta, activeUnit?.id)
+    fetchClinicorpSlots(dateStr, idconta, activeUnit?.id)
       .then(slots => setAvailableSlots(slots))
       .catch(err => setSlotsError(err.message))
       .finally(() => setSlotsLoading(false))
-  }, [selectedDate, selectedUnitId])
+  }
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
@@ -233,6 +221,7 @@ function App() {
     if (dateStr < todayStr) return
     setSelectedDate(dateStr)
     setSelectedSlot(null)
+    loadSlots(dateStr)
   }
 
   const toggleTag = (tagId) => {
@@ -416,7 +405,8 @@ function App() {
                           className={`unit-btn${selectedUnitId === unit.id ? ' unit-btn-active' : ''}`}
                           onClick={() => {
                             setSelectedUnitId(unit.id)
-                            // Steps/etiquetas recarregam via effect; limpa slots da unidade anterior
+                            loadPanelData(clinicConfig, unit.id)
+                            // Limpa slots da unidade anterior
                             setSelectedDate(null)
                             setSelectedSlot(null)
                             setAvailableSlots([])

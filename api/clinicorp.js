@@ -14,7 +14,7 @@ async function clinicorpFetch(url, auth, options = {}) {
     headers: { Authorization: auth, 'Content-Type': 'application/json', ...options.headers }
   })
   const text = await res.text()
-  let body = {}
+  let body
   try { body = JSON.parse(text) } catch { body = { raw: text } }
   if (!res.ok) console.error(`[Clinicorp] ${options.method || 'GET'} ${url} → ${res.status}`, JSON.stringify(body))
   return { ok: res.ok, status: res.status, body }
