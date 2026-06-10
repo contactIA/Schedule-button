@@ -1,18 +1,41 @@
 # Schedule Button — Botão de Agendamento
 
-Ferramenta multi-tenant para criação rápida de cards no CRM Helena e agendamentos no Clinicorp. Projetada para ser usada por operadores de CRC (Central de Relacionamento com o Cliente) de clínicas odontológicas.
+Plataforma **white-label multi-tenant** para criação rápida de cards no CRM Helena (WTS.chat) e agendamentos no Clinicorp. Projetada para operadores de CRC (Central de Relacionamento com o Cliente) de clínicas odontológicas.
+
+Um único deploy atende N clínicas — cada uma com suas próprias credenciais, painéis, etapas, etiquetas e unidades. Nenhuma clínica enxerga os dados de outra.
 
 ---
 
 ## O que faz
 
-O operador abre a tela a partir de um contato no WhatsApp (via URL com `?clinic=slug&contactId=...`), preenche os dados do paciente e escolhe um horário disponível na agenda da clínica. Com um único clique, o sistema:
+O operador abre a tela a partir de um contato no WhatsApp (via URL com `?idconta=...&contactId=...`) e resolve duas coisas num único fluxo de 2 etapas:
 
-1. Cria ou atualiza o card do paciente no funil CRM (Helena/WTS.chat)
-2. Aplica etiquetas de segmentação ao contato
-3. Cria o agendamento diretamente na agenda do Clinicorp
+1. **Cria ou move o card** do paciente no funil CRM (Helena/WTS.chat), com etiquetas do painel aplicadas direto na mesma tela
+2. **Cria o agendamento** na agenda do Clinicorp (busca o paciente pelo telefone; cria se não existir)
 
-Cada clínica é identificada por um `slug` único na URL. Suas credenciais, etapas, etiquetas e profissionais ficam armazenados no banco de dados — nenhum dado é hardcoded no código.
+### Fluxo do operador
+
+```
+Etapa 1 — Formulário
+  • Nome e telefone pré-preenchidos via API Helena (DDI +55 removido)
+  • Números privados/mascarados (@lid) exigem preenchimento manual
+  • Se o contato já tem card aberto → fluxo vira "Mover Card"
+  • Seletor de unidade (visível apenas com 2+ unidades)
+  • Campo livre de observações
+
+Etapa 2 — Calendário
+  • Navegação por mês; clique no dia busca horários no Clinicorp em tempo real
+  • Slots exibidos por dentista (ex: 08:00 → 09:00 · Alex)
+  • Etiquetas do painel como chips clicáveis (cores reais do Helena)
+  • Confirma com ou sem horário:
+      "Criar Card + Agendar" / "Mover Card sem Horário" etc.
+```
+
+### O que acontece no submit
+
+1. Busca card existente do contato → **cria** (com `tagIds`) ou **move** para a etapa "Agendado" configurada
+2. Etiquetas selecionadas são **mescladas** com as que o card já tem — nada é removido
+3. Se houver slot: busca paciente no Clinicorp pelo telefone → cria se não existir → cria o agendamento (cor e categoria configuráveis por unidade; padrão `#ffff00` / `AVALIAÇÃO`)
 
 ---
 
@@ -22,110 +45,123 @@ Cada clínica é identificada por um `slug` único na URL. Suas credenciais, eta
 |---|---|---|
 | Frontend | React 19 + Vite | Componentes reativos, build rápido |
 | Estilo | CSS customizado | Sem dependência de framework externo |
-| Backend | Vercel Functions (Node.js) | Serverless, zero infra, integração nativa com Vite |
-| Banco de dados | Supabase (PostgreSQL) | Multi-tenant: config por clínica, acesso via API REST |
-| Deploy | Vercel | Deploy automático via git push |
+| Backend | Vercel Functions (Node.js) | Serverless, zero infra |
+| Banco de dados | Supabase (PostgreSQL) | Config multi-tenant por clínica |
+| Deploy | Vercel | Deploy automático via git push na `main` |
+
+Sem TypeScript — projeto em JavaScript puro.
 
 ---
 
-## Arquitetura multi-tenant
+## Arquitetura white-label
 
-Um único deploy atende múltiplas clínicas. A clínica é identificada pelo parâmetro `?clinic=` na URL:
+A clínica é identificada pelo `idconta` na URL — o `companyId` da conta Helena:
 
 ```
-https://app.contactia.com.br?clinic=clinica-abc&contactId=uuid-do-contato
-https://app.contactia.com.br?clinic=clinica-xyz&contactId=uuid-do-contato
+https://schedule-button-xi.vercel.app/?idconta=XXXX&contactId=UUID
 ```
 
-O handler Vercel lê o `clinic`, busca as credenciais no Supabase e opera com elas. Nenhuma credencial fica no código-fonte.
+### Fluxo de identificação
+
+```
+URL ?idconta=XXXX
+  → GET /api/clinic?idconta=XXXX
+  → Supabase: clinics WHERE helena_account_id = XXXX
+  → Retorna config pública (sem tokens): nome, painéis, etapas, unidades, profissionais
+```
+
+Se o `idconta` não estiver cadastrado → tela "Clínica não encontrada" com botão "Sou administrador →".
+
+### Segurança das credenciais
+
+O frontend **nunca recebe tokens**. Todas as chamadas externas passam por Vercel Functions que carregam as credenciais do Supabase:
+
+```
+Frontend (browser)
+  → /api/proxy      ← injeta token Helena da clínica       → api.wts.chat
+  → /api/clinicorp  ← injeta credenciais Clinicorp da unit → api.clinicorp.com
+```
+
+As únicas variáveis de ambiente na Vercel são `SUPABASE_URL` e `SUPABASE_SERVICE_KEY` (mais `VITE_ADMIN_PASSWORD`, que protege apenas a UI do `/setup`).
 
 ### Schema do banco (Supabase)
 
 ```sql
--- Configuração por clínica
+-- Dados Helena por clínica
 clinics (
   id uuid PRIMARY KEY,
-  slug text UNIQUE,           -- identificador na URL
-  name text,                  -- nome da clínica
-  helena_token text,          -- Bearer token WTS.chat (criptografado)
-  helena_panel_id text,       -- UUID do painel CRM
-  helena_steps jsonb,         -- { crcA: uuid, crcB: uuid }
-  helena_tags jsonb,          -- { Agendado: uuid, Alta: uuid, ... }
-  clinicorp_auth text,        -- Basic base64(usuario:token) (criptografado)
-  clinicorp_subscriber_id text,
-  clinicorp_business_id bigint,
-  clinicorp_code_link int,
-  clinicorp_category_color text,
-  clinicorp_category_description text,
+  slug text UNIQUE,                -- identificador interno
+  name text,
+  helena_account_id text,          -- companyId da conta Helena (= idconta da URL)
+  helena_token text,               -- Bearer token WTS.chat
+  helena_panel_id text,            -- painel principal (fallback)
+  helena_agendado_step_id text,    -- etapa que representa "Agendado"
+  helena_steps jsonb,              -- cache das etapas [{ id, name }]
+  helena_tags jsonb,               -- cache de etiquetas
+  helena_panels jsonb,             -- painéis escolhidos no onboarding
+  active boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 )
 
--- Profissionais por clínica
+-- Credenciais Clinicorp por unidade (cada unidade pode ter painel/etapas próprios)
+units (
+  id uuid PRIMARY KEY,
+  clinic_id uuid REFERENCES clinics(id),
+  name text,                       -- ex: "Unidade Centro"
+  position int,
+  helena_panel_id text,            -- painel próprio (opcional; fallback = clínica)
+  helena_agendado_step_id text,
+  helena_steps jsonb,
+  clinicorp_user text,
+  clinicorp_token text,
+  clinicorp_subscriber_id text,
+  clinicorp_business_id bigint,
+  clinicorp_code_link int,
+  clinicorp_category_color text,        -- padrão '#ffff00'
+  clinicorp_category_description text,  -- padrão 'AVALIAÇÃO'
+  active boolean DEFAULT true
+)
+
+-- Dentistas (nome exibido no resumo do slot)
 professionals (
   id uuid PRIMARY KEY,
   clinic_id uuid REFERENCES clinics(id),
-  clinicorp_id text,          -- ID numérico do Clinicorp
+  clinicorp_id text,
   name text,
-  is_evaluator boolean,       -- aparece no seletor de dentista
+  is_evaluator boolean,
   active boolean DEFAULT true
 )
 ```
 
 ---
 
-## Onboarding de uma nova clínica
+## Onboarding de uma nova clínica (`/setup`)
 
-O processo requer apenas **3 inputs** do administrador. Tudo mais é buscado automaticamente via API:
-
-### Inputs necessários
-| # | Input | Onde encontrar |
-|---|---|---|
-| 1 | **Token Helena** | Painel Helena → Configurações → API |
-| 2 | **Usuário API Clinicorp** | Clinicorp → Sistema → Gerenciar Assinatura → Acesso Externo |
-| 3 | **Token API Clinicorp** | Mesma tela acima |
-
-### O que é buscado automaticamente
-
-**Do Token Helena:**
-```
-GET /crm/v1/panel           → lista painéis → admin seleciona 1
-GET /crm/v1/panel/{id}      → retorna etapas do funil automaticamente
-GET /core/v1/tag/list       → retorna etiquetas → admin seleciona quais usar
-```
-
-**Do Usuário + Token Clinicorp:**
-```
-GET /group/list_clinics                       → retorna subscriber_id e unidades
-GET /business/list                            → retorna BUSINESS_ID e CODE_LINK
-GET /professional/list_all_professionals      → retorna dentistas → admin marca avaliadores
-GET /appointment/list_categories              → retorna categorias → admin escolhe padrão
-```
-
-### Fluxo do painel admin (`/setup`)
+Página protegida por senha. Wizard de 3 passos:
 
 ```
-1. Cola Token Helena
-   → sistema lista painéis disponíveis
-   → admin seleciona painel + etapas (qual coluna é CRC A, qual é CRC B)
-   → admin seleciona tags a usar
+1. Dados da clínica
+   → nome + slug (gerado automaticamente, editável)
 
-2. Cola Usuário + Token Clinicorp
-   → sistema lista unidades da clínica
-   → admin seleciona unidade
-   → admin marca quais profissionais fazem avaliação
-   → admin escolhe categoria padrão de agendamento
+2. Helena / WTS.chat
+   → cola o token → "Verificar" lista os painéis da conta
+   → admin seleciona os painéis e, em cada um, a etapa que aciona o Clinicorp
+   → companyId (idconta) e etiquetas são detectados automaticamente
 
-3. Sistema gera slug, salva no banco
-   → retorna URL final: https://app.contactia.com.br?clinic=slug-gerado
+3. Unidades Clinicorp (1 ou mais)
+   → usuário + token da API por unidade
+   → businessId e codeLink buscados automaticamente
+   → opcional: painel Helena e etapa próprios da unidade
+   → profissionais importados automaticamente
 ```
 
----
+Ao salvar, exibe a URL final:
 
-## Multi-dentista avaliador
+```
+https://schedule-button-xi.vercel.app/?idconta=XXXX&contactId=
+```
 
-Clínicas com mais de um dentista realizando avaliações têm o seletor de profissional integrado ao step 2 (calendário). O operador filtra por dentista antes de ver os horários — ou seleciona "Qualquer disponível" para ver todos os slots.
-
-Para clínicas com apenas 1 dentista avaliador, o filtro não é exibido.
+O Helena substitui o `contactId` automaticamente ao abrir o botão a partir de uma conversa.
 
 ---
 
@@ -136,112 +172,143 @@ src/
   components/
     Calendar.jsx      — Calendário mensal com navegação
     SlotPicker.jsx    — Lista de horários disponíveis do Clinicorp
-    TagChips.jsx      — Chips de etiquetas do contato
+    TagChips.jsx      — Chips de etiquetas do painel (cores reais do Helena)
+  pages/
+    Setup.jsx         — Onboarding admin (/setup): senha + wizard de 3 passos
+    Setup.css
   services/
-    helena.js         — Chamadas à API WTS.chat (contatos, cards, etiquetas)
-    clinicorp.js      — Chamadas ao handler /api/clinicorp (slots e agendamento)
+    helena.js         — Chamadas à API WTS.chat via /api/proxy
+    clinicorp.js      — Chamadas ao handler /api/clinicorp
   utils/
     date.js           — Helper toDateStr compartilhado
-  config.js           — Constantes estáticas (substituído por Supabase no multi-tenant)
-  App.jsx             — Componente raiz — orquestra o fluxo de etapas
-  App.css             — Estilos da aplicação
-  main.jsx            — Entry point do React
+  App.jsx             — Fluxo do operador (2 etapas)
+  App.css
+  main.jsx            — Entry point (rota /setup vs app)
 
 api/
-  clinicorp.js        — Handler Vercel: busca horários e cria agendamentos no Clinicorp
-  proxy.js            — Handler Vercel: proxy para a API Helena (evita CORS em produção)
+  _supabase.js        — Client Supabase + queries de clínica/unidade
+  clinic.js           — Config pública da clínica por idconta (sem tokens)
+  proxy.js            — Proxy Helena (injeta token da clínica, resolve CORS)
+  clinicorp.js        — Horários disponíveis + criação de paciente/agendamento
+  setup.js            — Cadastro de clínica + unidades (auto-fetch de IDs)
+  helena-preview.js   — Valida token Helena e lista painéis/etapas (wizard)
 
 Docs/
-  clinicorp-api-docs/ — Documentação completa da API Clinicorp (49 endpoints)
-  Documentação API Helena/ — Documentação completa da API WTS.chat/Helena
-  ROADMAP.md          — Próximos passos e melhorias planejadas
-  ARCHITECTURE.md     — Decisões de arquitetura e discussões de design
+  clinicorp-api-docs/        — Documentação da API Clinicorp
+  Documentação API Helena/   — Documentação da API WTS.chat/Helena
+  ROADMAP.md                 — Próximos passos
+  ARCHITECTURE.md            — Decisões de arquitetura
 ```
 
 ---
 
 ## Endpoints consumidos
 
-### API WTS.chat (Helena CRM)
+### API WTS.chat (Helena CRM) — via `/api/proxy`
 Base URL: `https://api.wts.chat`
 
 | Método | Endpoint | Finalidade |
 |---|---|---|
-| GET | `/core/v1/contact/{id}` | Busca nome e telefone do contato |
-| GET | `/crm/v1/panel/card?ContactId=...` | Verifica se já existe card para o contato |
-| POST | `/crm/v1/panel/card` | Cria novo card no funil |
-| PUT | `/crm/v2/panel/card/{id}` | Move card para nova etapa |
+| GET | `/core/v1/contact/{id}` | Nome e telefone do contato |
+| GET | `/crm/v1/panel/card?ContactId=...` | Verifica se já existe card |
+| GET | `/crm/v2/panel?IncludeDetails=Steps,Tags` | Etapas e etiquetas do painel |
+| POST | `/crm/v1/panel/card` | Cria card (com `tagIds`) |
+| PUT | `/crm/v2/panel/card/{id}` | Move card de etapa + atualiza `tagIds` |
 | POST | `/crm/v1/panel/card/{id}/note` | Adiciona anotação ao card |
-| POST | `/core/v1/contact/{id}/tags` | Aplica etiquetas ao contato |
 
-### API Clinicorp
+### API Clinicorp — via `/api/clinicorp`
 Base URL: `https://api.clinicorp.com/rest/v1`
 
 | Método | Endpoint | Finalidade |
 |---|---|---|
-| GET | `/appointment/get_avaliable_times_calendar` | Lista horários disponíveis por data |
+| GET | `/appointment/get_avaliable_times_calendar` | Horários disponíveis por data |
 | GET | `/patient/get?Phone=...` | Busca paciente pelo telefone |
 | POST | `/patient/create` | Cria paciente se não existir |
-| POST | `/appointment/create_appointment_by_api` | Cria o agendamento na agenda |
+| POST | `/appointment/create_appointment_by_api` | Cria o agendamento |
+| GET | `/business/list` | businessId/codeLink no onboarding |
+| GET | `/professional/list_all_professionals` | Importa dentistas no onboarding |
 
 ---
 
 ## Como rodar localmente
 
+As Vercel Functions precisam rodar junto com o frontend — use o Vercel CLI:
+
 ```bash
 npm install
-npm run dev
-# Abre em http://localhost:5175
+npm i -g vercel        # se ainda não tiver
+vercel dev             # sobe frontend + functions com .env.local
 ```
 
-Em desenvolvimento, o Vite proxeia `/api/core` e `/api/crm` para `https://api.wts.chat` via plugin customizado em `vite.config.js`.
+`.env.local` necessário:
+
+```
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+VITE_ADMIN_PASSWORD=...
+```
 
 Teste com clínica e contato reais:
+
 ```
-http://localhost:5175?clinic=<slug>&contactId=<UUID_DO_CONTATO>
+http://localhost:3000?idconta=<ID_CONTA_HELENA>&contactId=<UUID_DO_CONTATO>
+```
+
+Sem `contactId`, o formulário funciona mas não pré-preenche nome/telefone nem vincula ao contato no CRM.
+
+```bash
+npm run lint    # ESLint (zero problemas)
+npm run build   # build de produção
 ```
 
 ---
 
 ## Deploy
 
-Push na branch `main` → deploy automático na Vercel.
+Push na branch `main` do repositório `contactIA/Schedule-button` → deploy automático na Vercel.
 
-- Funções em `api/` viram Serverless Functions
-- Timeout de 15s configurado em `vercel.json`
-- Node.js 20 requerido
-- Variáveis de ambiente necessárias: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+- Funções em `api/` viram Serverless Functions (timeouts por função em `vercel.json`)
+- Rewrite de `/setup` → SPA configurado em `vercel.json`
+- Variáveis de ambiente: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `VITE_ADMIN_PASSWORD`
+
+---
+
+## Roadmap (resumo)
+
+Ver `Docs/ROADMAP.md` para a lista completa.
+
+- Painel de edição de clínicas já cadastradas no `/setup`
+- Seletor de dentista avaliador no calendário (filtro por profissional)
+- Confirmação automática por WhatsApp após o agendamento
+- Dias sem disponibilidade desabilitados no calendário
+- Busca manual de contato por telefone (uso sem `contactId`)
 
 ---
 
 ## Changelog
 
-### 2026-06-03 — Sprint de estrutura, correções e planejamento multi-tenant
+### 2026-06-10 — Etiquetas no card + lint zerado
 
-**Produto:**
-- Número de telefone remove automaticamente o prefixo `+55` da API Helena
-- Cor do agendamento no Clinicorp alterada para `#ffff00` (AVALIAÇÃO) via consulta à `list_categories`
-- Bug `Invalid time value` corrigido — `normTime` restaurada (API Clinicorp retorna `"8:0"` sem zero)
+- **Etiquetas do painel aplicáveis ao card** na tela de agendamento: chips com as cores reais do Helena na etapa 2; card novo recebe `tagIds` na criação, card existente mescla com as etiquetas já presentes
+- Correção de dois `ReferenceError` (troca de unidade no app e campo de token no setup)
+- ESLint zerado: globals Node em `api/`, `Docs/` ignorado, landing órfã removida, refactor de hooks no `App.jsx` (fetch por eventos em vez de setState síncrono em effects)
 
-**Arquitetura:**
-- Projeto redesenhado como **multi-tenant**: uma instância para múltiplas clínicas
-- Decisão: Opção B (banco de dados Supabase + slug por clínica) ao invés de um deploy por clínica
-- Onboarding planejado para exigir apenas 3 inputs (token Helena + usuário/token Clinicorp), com auto-fetch do restante
-- Seletor de dentista avaliador planejado para clínicas multi-profissional
+### 2026-06-05 a 06-09 — White-label
 
-**Refatoração:**
-- Componentes extraídos para `src/components/`: `Calendar.jsx`, `SlotPicker.jsx`, `TagChips.jsx`
-- API movida para `src/services/`: `helena.js`, `clinicorp.js`
-- Helper `toDateStr` extraído para `src/utils/date.js`
-- `src/api.js` e `get_tags.js` deletados (arquivos mortos)
+- Multi-tenant via Supabase: tabelas `clinics`, `units` e `professionals`
+- Identificação por `?idconta=` (companyId Helena), detectado automaticamente no onboarding
+- Onboarding `/setup` em 3 passos com auto-fetch (painéis, etapas, etiquetas, businessId, codeLink, profissionais)
+- Suporte a múltiplas unidades Clinicorp por clínica (credenciais e painel próprios)
+- Multi-painel: admin escolhe painéis e a etapa "Agendado" de cada um; painel derivado da unidade no runtime
+- Gradiente roxo→vermelho da marca em todo o app
 
-**Documentação:**
-- `README.md` reescrito como genérico (removidas referências à Prime Odonto)
-- `CLAUDE.md` criado com contexto completo para o agente de IA
-- `Docs/ROADMAP.md` criado com 7 iniciativas priorizadas
-- `Docs/ARCHITECTURE.md` criado com decisões de design e justificativas
+### 2026-06-03 — Estrutura, correções e planejamento multi-tenant
 
----
+- Telefone remove automaticamente o prefixo `+55` da API Helena
+- Cor do agendamento `#ffff00` (AVALIAÇÃO) via `list_categories`
+- Bug `Invalid time value` corrigido (`normTime` restaurada)
+- Componentes extraídos para `src/components/`, serviços para `src/services/`
+- `README.md`, `CLAUDE.md`, `Docs/ROADMAP.md` e `Docs/ARCHITECTURE.md` criados
 
 ### Histórico anterior
 

@@ -449,8 +449,7 @@ function AdminForm({ onSuccess }) {
                       <div className="admin-field">
                         <label>Subscriber ID <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
                         <input type="text" value={unit.subscriberId}
-                          onChange={e => updateUnit(i, 'subscriberId', e.target.value.trim())}
-                          placeholder={unit.clinicorpUser || 'Padrão: mesmo do usuário da API'} />
+                          onChange={e => updateUnit(i, 'subscriberId', e.target.value.trim())} />
                       </div>
 
                       {/* Painel Helena próprio (opcional) */}
