@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   createCard, getContact, findCardByContact,
-  updateCardStep, addCardNote, getPanelData
+  updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
-import { toDateStr } from './utils/date'
+import { toDateStr, toBrDate } from './utils/date'
 import './App.css'
 
 // Detecta números privados/mascarados do WhatsApp (lid@, @g.us, etc.)
@@ -27,6 +27,26 @@ function stripCountryCode(phone) {
   if (digits.length === 13 && digits.startsWith('55')) return digits.slice(2)
   if (digits.length === 12 && digits.startsWith('55')) return digits.slice(2)
   return digits
+}
+
+// Momento de envio do lembrete conforme a regra da clínica.
+// Nunca devolve um instante no passado — cai para daqui a 5 minutos.
+function reminderScheduling(timing, dateStr, fromTime) {
+  const appt = new Date(`${dateStr}T${fromTime}:00`)
+  let when
+  if (timing?.mode === 'immediate') {
+    when = new Date(Date.now() + 2 * 60000)
+  } else if (timing?.mode === 'hours_before') {
+    when = new Date(appt.getTime() - (timing.hours ?? 24) * 3600000)
+  } else {
+    // day_before (padrão): véspera no horário configurado
+    const [h, m] = (timing?.time ?? '18:00').split(':')
+    when = new Date(appt)
+    when.setDate(when.getDate() - 1)
+    when.setHours(Number(h), Number(m || 0), 0, 0)
+  }
+  if (when.getTime() <= Date.now()) when = new Date(Date.now() + 5 * 60000)
+  return when.toISOString()
 }
 
 // Parâmetros da URL — fixos durante toda a sessão
@@ -291,12 +311,43 @@ function App() {
         }
       }
 
+      // Lembrete agendado — só após Clinicorp confirmado; falha nunca desfaz nada
+      let reminderStatus = null
+      const reminderCfg = clinicConfig?.scheduledMessage
+      if (clinicorpStatus === 'ok' && reminderCfg?.enabled) {
+        try {
+          const prof = (clinicConfig?.professionals ?? []).find(p =>
+            String(p.clinicorp_id) === selectedSlot.professionalId ||
+            p.id === selectedSlot.professionalId
+          )
+          await scheduleReminder(reminderCfg, {
+            patientName: nome.trim(),
+            phone:       telefone,
+            dateBr:      toBrDate(selectedDate),
+            time:        selectedSlot.from,
+            dentist:     prof?.name ?? '',
+            clinicName:  clinicConfig?.name ?? '',
+            scheduling:  reminderScheduling(reminderCfg.timing, selectedDate, selectedSlot.from),
+          }, idconta)
+          reminderStatus = 'ok'
+        } catch (err) {
+          console.warn('[Lembrete]', err.message)
+          reminderStatus = err.message
+        }
+      }
+
       const baseText = card
         ? `Card movido para "${stepName}" com sucesso!`
         : `Card criado em "${stepName}" com sucesso!`
 
-      if (clinicorpStatus === 'ok') {
-        setMessage({ type: 'success', text: baseText + ' Agendamento no Clinicorp confirmado.' })
+      if (clinicorpStatus === 'ok' && reminderStatus && reminderStatus !== 'ok') {
+        setMessage({
+          type: 'warning',
+          text: `${baseText} Agendamento confirmado, mas o lembrete não foi programado: ${reminderStatus}`,
+        })
+      } else if (clinicorpStatus === 'ok') {
+        const reminderNote = reminderStatus === 'ok' ? ' Lembrete programado.' : ''
+        setMessage({ type: 'success', text: baseText + ' Agendamento no Clinicorp confirmado.' + reminderNote })
       } else if (clinicorpStatus) {
         setMessage({ type: 'error', text: `${baseText}\n\nErro no Clinicorp: ${clinicorpStatus}` })
       } else {
@@ -311,7 +362,8 @@ function App() {
       setDescricao('')
       setSelectedTagIds(new Set())
       setExistingCard(null)
-      setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
+      const hadIssue = (clinicorpStatus && clinicorpStatus !== 'ok') || (reminderStatus && reminderStatus !== 'ok')
+      setTimeout(() => setMessage(null), hadIssue ? 12000 : 6000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {

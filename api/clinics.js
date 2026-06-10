@@ -34,6 +34,7 @@ export default async function handler(req, res) {
           helenaPanelId:   clinic.helena_panel_id,
           agendadoStepId:  clinic.helena_agendado_step_id,
           helenaPanels:    clinic.helena_panels ?? [],
+          scheduledMessage: clinic.scheduled_message ?? null,
           hasToken:        !!clinic.helena_token,
           units:           units ?? [],
         })
@@ -68,8 +69,12 @@ export default async function handler(req, res) {
 
   // ── PUT → atualiza somente os campos enviados ───────────────────
   if (req.method === 'PUT') {
-    const { id, name, slug, helenaToken, helenaPanels, helenaSteps } = req.body ?? {}
+    const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
+
+    if (scheduledMessage?.enabled && (!scheduledMessage.channelFrom || !scheduledMessage.templateId)) {
+      return res.status(400).json({ error: 'Lembrete ativado exige canal e modelo de mensagem.' })
+    }
 
     try {
       const patch = {}
@@ -92,6 +97,9 @@ export default async function handler(req, res) {
       }
 
       if (Array.isArray(helenaSteps) && helenaSteps.length > 0) patch.helena_steps = helenaSteps
+
+      // Presente no body (mesmo null) → atualiza; ausente → não mexe
+      if ('scheduledMessage' in (req.body ?? {})) patch.scheduled_message = scheduledMessage ?? null
 
       if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: 'Nenhum campo para atualizar.' })

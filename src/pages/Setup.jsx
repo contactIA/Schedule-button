@@ -46,6 +46,144 @@ function toggleTagIn(list, panelId, tagId) {
   })
 }
 
+// ── Lembrete de agendamento (mensagem agendada) ───────────────────
+const REMINDER_VARS = [
+  { id: 'patient_name', label: 'Nome do paciente' },
+  { id: 'date',         label: 'Data da consulta' },
+  { id: 'time',         label: 'Horário da consulta' },
+  { id: 'dentist',      label: 'Nome do dentista' },
+  { id: 'clinic_name',  label: 'Nome da clínica' },
+]
+
+// Sugere a variável pelo nome do parâmetro do modelo ([NOME], [DATA]...)
+function guessReminderVar(paramName) {
+  const n = (paramName || '').toUpperCase()
+  if (n.includes('DENT'))                  return 'dentist'
+  if (n.includes('CLIN'))                  return 'clinic_name'
+  if (n.includes('NOME'))                  return 'patient_name'
+  if (n.includes('DATA') || n.includes('DIA')) return 'date'
+  if (n.includes('HOR'))                   return 'time'
+  return 'patient_name'
+}
+
+function ReminderConfig({ channels, templates, value, onChange }) {
+  const cfg = value ?? { enabled: false }
+  const set = (patch) => onChange({ ...cfg, ...patch })
+  const template = templates.find(t => t.id === cfg.templateId)
+  const mode = cfg.timing?.mode ?? 'day_before'
+
+  return (
+    <div className="admin-field">
+      <label>Lembrete de agendamento</label>
+      <button
+        type="button"
+        className={`reminder-toggle${cfg.enabled ? ' reminder-toggle-on' : ''}`}
+        onClick={() => set({ enabled: !cfg.enabled })}
+      >
+        <span className="reminder-toggle-knob" />
+        {cfg.enabled ? 'Ativado' : 'Desativado'}
+      </button>
+      <span className="admin-field-hint">
+        Agenda uma mensagem de WhatsApp para o paciente após a confirmação no Clinicorp.
+        Exige o app <strong>Mensagens agendadas</strong> habilitado na conta Helena.
+      </span>
+
+      {cfg.enabled && (
+        <div className="reminder-config">
+          <div className="admin-field">
+            <label>Canal de envio *</label>
+            <select
+              className="step-select"
+              value={cfg.channelId ?? ''}
+              onChange={e => {
+                const ch = channels.find(c => c.id === e.target.value)
+                set({ channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' })
+              }}
+            >
+              <option value="">Selecione o canal...</option>
+              {channels.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+
+          <div className="admin-field">
+            <label>Modelo de mensagem *</label>
+            <select
+              className="step-select"
+              value={cfg.templateId ?? ''}
+              onChange={e => {
+                const t = templates.find(x => x.id === e.target.value)
+                const paramMap = {}
+                for (const p of t?.params ?? []) paramMap[p] = guessReminderVar(p)
+                set({ templateId: t?.id ?? '', templateName: t?.name ?? '', paramMap })
+              }}
+            >
+              <option value="">Selecione o modelo...</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <span className="admin-field-hint">Modelos aprovados da conta Helena.</span>
+          </div>
+
+          {template?.params?.length > 0 && (
+            <div className="admin-field">
+              <label>Variáveis do modelo</label>
+              <div className="reminder-params">
+                {template.params.map(p => (
+                  <div key={p} className="reminder-param-row">
+                    <code>{p}</code>
+                    <span className="reminder-param-arrow">→</span>
+                    <select
+                      className="step-select"
+                      value={cfg.paramMap?.[p] ?? 'patient_name'}
+                      onChange={e => set({ paramMap: { ...cfg.paramMap, [p]: e.target.value } })}
+                    >
+                      {REMINDER_VARS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="admin-field">
+            <label>Quando enviar *</label>
+            <select
+              className="step-select"
+              value={mode}
+              onChange={e => set({ timing: { ...cfg.timing, mode: e.target.value } })}
+            >
+              <option value="day_before">Na véspera da consulta</option>
+              <option value="hours_before">Horas antes da consulta</option>
+              <option value="immediate">Logo após o agendamento</option>
+            </select>
+            {mode === 'day_before' && (
+              <div className="reminder-timing-row">
+                <span>às</span>
+                <input
+                  type="time"
+                  value={cfg.timing?.time ?? '18:00'}
+                  onChange={e => set({ timing: { ...cfg.timing, mode, time: e.target.value } })}
+                />
+              </div>
+            )}
+            {mode === 'hours_before' && (
+              <div className="reminder-timing-row">
+                <input
+                  type="number" min="1" max="72"
+                  value={cfg.timing?.hours ?? 24}
+                  onChange={e => set({ timing: { ...cfg.timing, mode, hours: Number(e.target.value) } })}
+                />
+                <span>hora(s) antes</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Seletor de painéis com config de etapa e etiquetas ────────────
 function PanelPicker({ panels, picked, onTogglePanel, onUpdatePanel, onToggleTag }) {
   return (
@@ -253,6 +391,9 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
   const [newToken,     setNewToken]     = useState('')
   const [helenaPanels, setHelenaPanels] = useState([])
   const [pickedPanels, setPickedPanels] = useState([])
+  const [channels,     setChannels]     = useState([])
+  const [templates,    setTemplates]    = useState([])
+  const [reminder,     setReminder]     = useState(null)
 
   useEffect(() => {
     const headers = { 'x-admin-key': adminKey }
@@ -270,6 +411,9 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
         setClinic(detail)
         setName(detail.name ?? '')
         setSlug(detail.slug ?? '')
+        setChannels(preview.channels ?? [])
+        setTemplates(preview.templates ?? [])
+        setReminder(detail.scheduledMessage ?? null)
         const live = preview.panels ?? []
         setHelenaPanels(live)
 
@@ -304,6 +448,10 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    if (reminder?.enabled && (!reminder.channelId || !reminder.templateId)) {
+      setSaveError('Lembrete ativado: selecione o canal e o modelo de mensagem.')
+      return
+    }
     setSaving(true)
     setSaveError('')
     try {
@@ -315,6 +463,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
           name,
           slug,
           helenaToken: newToken.trim() || undefined,
+          // undefined → não mexe na config salva (tolera banco sem a coluna)
+          scheduledMessage: reminder ?? undefined,
           helenaPanels: pickedPanels.map(p => ({
             id:            p.id,
             name:          p.displayName || p.name,
@@ -401,6 +551,13 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
             <span className="admin-field-hint">Preencha somente para substituir o token atual.</span>
           </div>
 
+          <ReminderConfig
+            channels={channels}
+            templates={templates}
+            value={reminder}
+            onChange={setReminder}
+          />
+
           {clinic.units?.length > 0 && (
             <div className="admin-field">
               <label>Unidades</label>
@@ -467,6 +624,9 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
   // pickedPanels: [{ id, name, displayName, agendadoStepId, steps }]
   const [stepsLoading,  setStepsLoading]  = useState(false)
   const [stepsError,    setStepsError]    = useState('')
+  const [channels,      setChannels]      = useState([])
+  const [templates,     setTemplates]     = useState([])
+  const [reminder,      setReminder]      = useState(null)
 
   // Unidades Clinicorp (multi-unidade)
   const [units, setUnits] = useState([{
@@ -513,6 +673,8 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
       setHelenaPanels(data.panels ?? [])
+      setChannels(data.channels ?? [])
+      setTemplates(data.templates ?? [])
     } catch (err) {
       setStepsError(err.message)
     } finally {
@@ -550,6 +712,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
             agendadoStepId: p.agendadoStepId,
             allowedTagIds: p.allowedTagIds,
           })),
+          scheduledMessage: reminder ?? undefined,
           units: units.map(u => ({
             name:            u.name,
             clinicorpUser:   u.clinicorpUser,
@@ -709,12 +872,24 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
               </div>
             )}
 
+            {helenaPanels.length > 0 && (
+              <ReminderConfig
+                channels={channels}
+                templates={templates}
+                value={reminder}
+                onChange={setReminder}
+              />
+            )}
+
             <div className="admin-actions">
               <button type="button" className="admin-btn-secondary" onClick={handleBack}>← Voltar</button>
               <button
                 type="submit"
                 className="admin-btn-primary"
-                disabled={!helenaToken || pickedPanels.length === 0 || pickedPanels.some(p => !p.agendadoStepId)}
+                disabled={
+                  !helenaToken || pickedPanels.length === 0 || pickedPanels.some(p => !p.agendadoStepId)
+                  || (reminder?.enabled && (!reminder.channelId || !reminder.templateId))
+                }
               >
                 Próximo →
               </button>

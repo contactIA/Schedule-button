@@ -32,16 +32,38 @@ export default async function handler(req, res) {
   if (!token) return res.status(400).json({ error: 'Parâmetro token ou clinicId obrigatório' })
 
   try {
-    // v2/panel com IncludeDetails retorna painéis + etapas + etiquetas em uma única chamada
-    const { ok, body } = await helenaGet(
-      '/crm/v2/panel?IncludeDetails=Steps&IncludeDetails=Tags&PageSize=100', token
-    )
+    // Painéis (com etapas + etiquetas), canais e modelos em paralelo.
+    // Canais/modelos alimentam a config do lembrete — falha neles não bloqueia.
+    const [panelsRes, channelsRes, templatesRes] = await Promise.all([
+      helenaGet('/crm/v2/panel?IncludeDetails=Steps&IncludeDetails=Tags&PageSize=100', token),
+      helenaGet('/chat/v1/channel?ChannelType=All', token),
+      helenaGet('/chat/v1/template?ApprovedOnly=true&PageSize=100&IncludeDetails=Params', token),
+    ])
 
+    const { ok, body } = panelsRes
     if (!ok) {
       return res.status(400).json({
         error: `Token inválido ou sem acesso. (${JSON.stringify(body).slice(0, 200)})`
       })
     }
+
+    const channels = channelsRes.ok && Array.isArray(channelsRes.body)
+      ? channelsRes.body.filter(c => c.active !== false).map(c => ({
+          id:     c.id,
+          number: c.number,
+          label:  `${c.numberFormatted || c.number}${c.identity?.platform ? ` · ${c.identity.platform}` : ''}`,
+        }))
+      : []
+
+    const templates = templatesRes.ok
+      ? (templatesRes.body.items ?? []).map(t => ({
+          id:        t.id,
+          name:      t.name,
+          type:      t.type,
+          channelId: t.channelId,
+          params:    (t.params ?? []).map(p => p.name),
+        }))
+      : []
 
     const panels = (body.items ?? []).map(panel => ({
       id:    panel.id,
@@ -62,7 +84,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Nenhum painel encontrado nesta conta Helena.' })
     }
 
-    return res.status(200).json({ panels, totalPanels: body.totalItems ?? panels.length })
+    return res.status(200).json({ panels, channels, templates, totalPanels: body.totalItems ?? panels.length })
 
   } catch (err) {
     console.error('[helena-preview]', err.message)

@@ -99,6 +99,45 @@ export async function addCardNote(cardId, text, idconta) {
   return res.json()
 }
 
+// Agenda o lembrete via app "Mensagens agendadas" do Helena.
+// cfg vem de clinics.scheduled_message; data traz os valores das variáveis.
+export async function scheduleReminder(cfg, data, idconta) {
+  const digits = (data.phone || '').replace(/\D/g, '')
+  if (!digits) throw new Error('Paciente sem telefone para o lembrete.')
+  // API de envio exige DDI — a UI trabalha sem o 55
+  const to = digits.length <= 11 ? `55${digits}` : digits
+
+  const values = {
+    patient_name: data.patientName,
+    date:         data.dateBr,
+    time:         data.time,
+    dentist:      data.dentist || '',
+    clinic_name:  data.clinicName || '',
+  }
+  const templateParams = {}
+  for (const [param, varId] of Object.entries(cfg.paramMap ?? {})) {
+    templateParams[param] = values[varId] ?? ''
+  }
+
+  const res = await proxyFetch('/chat/v1/scheduled-message', idconta, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from:        cfg.channelFrom || undefined,
+      to,
+      type:        'TEMPLATE',
+      templateId:  cfg.templateId,
+      templateParams,
+      scheduling:  data.scheduling,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.text || err.message || err.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function createCard(stepId, panelId, title, description, contactId, idconta, dueDate = null, tagIds = null) {
   const payload = { panelId, stepId, title, description: description || null }
   if (contactId) payload.contactIds = [contactId]

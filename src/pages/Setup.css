@@ -682,6 +682,125 @@
 
 .success-actions .admin-btn-secondary { flex: 1; }
 
+/* ── Lembrete de agendamento ── */
+.reminder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 8px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+  align-self: flex-start;
+}
+
+.reminder-toggle-knob {
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.reminder-toggle-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s;
+}
+
+.reminder-toggle-on {
+  border-color: rgba(147, 51, 234, 0.4);
+  color: #7C3AED;
+  background: #faf5ff;
+}
+
+.reminder-toggle-on .reminder-toggle-knob {
+  background: linear-gradient(135deg, #7C3AED 0%, #C026D3 50%, #DC2626 100%);
+}
+
+.reminder-toggle-on .reminder-toggle-knob::after {
+  transform: translateX(16px);
+}
+
+.reminder-config {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fdfcff;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reminder-params {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reminder-param-row code {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7C3AED;
+  background: #faf5ff;
+  border: 1px solid rgba(147, 51, 234, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  min-width: 90px;
+  text-align: center;
+}
+
+.reminder-param-arrow {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.reminder-param-row .step-select { flex: 1; }
+
+.reminder-timing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.reminder-timing-row input[type="time"],
+.reminder-timing-row input[type="number"] {
+  padding: 9px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #fff;
+}
+
+.reminder-timing-row input[type="number"] { width: 80px; }
+
 /* ── Unit Cards ── */
 .units-list {
   display: flex;

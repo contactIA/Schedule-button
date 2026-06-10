@@ -86,7 +86,12 @@ export default async function handler(req, res) {
     helenaPanels  = [],     // todos os painéis escolhidos pelo admin
     units         = [],
     helenaAccountId,
+    scheduledMessage = null, // config do lembrete de agendamento (opcional)
   } = req.body ?? {}
+
+  if (scheduledMessage?.enabled && (!scheduledMessage.channelFrom || !scheduledMessage.templateId)) {
+    return res.status(400).json({ error: 'Lembrete ativado exige canal e modelo de mensagem.' })
+  }
 
   if (!clinicName || !slug || !helenaToken || !helenaPanelId || !agendadoStepId) {
     return res.status(400).json({ error: 'Campos obrigatórios: clinicName, slug, helenaToken, helenaPanelId, agendadoStepId' })
@@ -130,6 +135,8 @@ export default async function handler(req, res) {
         helena_tags:             fetchedTags,
         helena_panels:           helenaPanels.length > 0 ? helenaPanels : null,
         helena_account_id:       accountId ?? null,
+        // Coluna só entra no insert quando há config — tolera banco sem a coluna
+        ...(scheduledMessage ? { scheduled_message: scheduledMessage } : {}),
       })
       .select('id')
       .single()
