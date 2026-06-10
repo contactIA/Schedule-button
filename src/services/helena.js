@@ -18,9 +18,11 @@ export async function getContact(contactId, idconta) {
   return res.json()
 }
 
-// Busca card em todos os painéis do workspace (sem filtro PanelId)
-export async function findCardByContact(contactId, idconta) {
-  const qs = new URLSearchParams({ ContactId: contactId, PageSize: 1, PageNumber: 1 })
+// Busca card aberto do contato no painel. A API exige PanelId —
+// sem ele retorna 500 e o app criaria um card duplicado.
+export async function findCardByContact(contactId, idconta, panelId) {
+  if (!contactId || !panelId) return null
+  const qs = new URLSearchParams({ PanelId: panelId, ContactId: contactId, PageSize: 1, PageNumber: 1 })
   const res = await proxyFetch(`/crm/v1/panel/card?${qs}`, idconta)
   if (res.ok) {
     const json = await res.json()

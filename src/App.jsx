@@ -182,7 +182,7 @@ function App() {
                 if (!priv) setTelefone(stripCountryCode(phone))
               })
               .catch(err => console.warn('Erro ao carregar contato:', err)),
-            findCardByContact(contactId, idconta)
+            findCardByContact(contactId, idconta, defaultUnit?.panelId ?? config.panelId)
               .then(card => { if (card) setExistingCard(card) })
               .catch(() => null)
           )
@@ -255,7 +255,7 @@ function App() {
         finalDescription = line + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
       }
 
-      const card       = await findCardByContact(contactId, idconta).catch(() => null)
+      const card       = await findCardByContact(contactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
       const pickedTags  = [...selectedTagIds]
 
@@ -406,6 +406,10 @@ function App() {
                           onClick={() => {
                             setSelectedUnitId(unit.id)
                             loadPanelData(clinicConfig, unit.id)
+                            // Card existente depende do painel da unidade
+                            findCardByContact(contactId, idconta, unit.panelId ?? clinicConfig.panelId)
+                              .then(card => setExistingCard(card))
+                              .catch(() => setExistingCard(null))
                             // Limpa slots da unidade anterior
                             setSelectedDate(null)
                             setSelectedSlot(null)
