@@ -257,6 +257,23 @@ body {
   background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px;
 }
 
+/* ── Etiquetas ── */
+.tags-section {
+  padding: 16px 28px 0; display: flex; flex-direction: column; gap: 10px;
+}
+.tag-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border: 1.5px solid #e2e8f0; border-radius: 999px;
+  background: #fff; font-size: 13px; font-weight: 600; font-family: inherit;
+  color: #475569; cursor: pointer; transition: all 0.15s;
+}
+.tag-chip:hover:not(.tag-chip-active) {
+  border-color: var(--brand-solid); color: var(--brand-text); background: var(--brand-light);
+}
+.tag-chip-active { border-color: transparent; box-shadow: 0 1px 4px rgba(15,23,42,0.18); }
+.tag-chip-check { font-size: 11px; font-weight: 800; }
+
 /* ── Step 2 Actions ── */
 .step2-actions { display: flex; gap: 10px; padding: 16px 28px 0; }
 .step2-actions .btn-primary { flex: 1; }

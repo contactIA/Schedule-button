@@ -394,7 +394,7 @@ function AdminForm({ onSuccess }) {
                 <input
                   type="password"
                   value={helenaToken}
-                  onChange={e => { setHelenaToken(e.target.value); setHelenaSteps([]); setAgendadoStepId('') }}
+                  onChange={e => { setHelenaToken(e.target.value); setHelenaPanels([]); setPickedPanels([]) }}
                   placeholder="pn_xxxxxxxxxxxxxxxxxxxx"
                   required
                   autoFocus

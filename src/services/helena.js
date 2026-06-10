@@ -51,21 +51,26 @@ export async function getPanelData(panelId, idconta) {
     }))
 
   const tags = (panel.tags ?? []).map(t => ({
-    id:     t.id,
-    label:  t.name ?? t.title ?? '',
-    locked: false,
+    id:        t.id,
+    label:     (t.name ?? t.title ?? '').trim(),
+    nameColor: t.nameColor || '#fff',
+    bgColor:   t.bgColor   || '#9333EA',
   }))
 
   return { steps, tags }
 }
 
 
-export async function updateCardStep(cardId, stepId, idconta, dueDate = null) {
+export async function updateCardStep(cardId, stepId, idconta, dueDate = null, tagIds = null) {
   const fields = ['stepId']
   const payload = { fields, stepId }
   if (dueDate) {
     fields.push('dueDate')
     payload.dueDate = new Date(dueDate).toISOString()
+  }
+  if (tagIds?.length) {
+    fields.push('tagIds')
+    payload.tagIds = tagIds
   }
   const res = await proxyFetch(`/crm/v2/panel/card/${cardId}`, idconta, {
     method: 'PUT',
@@ -92,10 +97,11 @@ export async function addCardNote(cardId, text, idconta) {
   return res.json()
 }
 
-export async function createCard(stepId, panelId, title, description, contactId, idconta, dueDate = null) {
+export async function createCard(stepId, panelId, title, description, contactId, idconta, dueDate = null, tagIds = null) {
   const payload = { panelId, stepId, title, description: description || null }
   if (contactId) payload.contactIds = [contactId]
   if (dueDate) payload.dueDate = new Date(dueDate).toISOString()
+  if (tagIds?.length) payload.tagIds = tagIds
 
   const res = await proxyFetch('/crm/v1/panel/card', idconta, {
     method: 'POST',
@@ -110,18 +116,4 @@ export async function createCard(stepId, panelId, title, description, contactId,
     throw new Error(`Erro ao criar card (HTTP ${res.status}): ${errMsg}`)
   }
   return res.json()
-}
-
-export async function addContactTags(contactId, tagIds, idconta) {
-  if (!tagIds || tagIds.length === 0) return
-  // operation: InsertIfNotExists — adiciona sem remover as existentes
-  const res = await proxyFetch(`/core/v1/contact/${contactId}/tags`, idconta, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tagIds, operation: 'InsertIfNotExists' })
-  })
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    console.warn(`Aviso: Falha ao adicionar etiquetas (HTTP ${res.status}): ${errText}`)
-  }
 }

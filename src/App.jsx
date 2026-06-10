@@ -4,9 +4,9 @@ import {
   updateCardStep, addCardNote, getPanelData
 } from './services/helena'
 import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
-import { AGENDADO_STEP_NAME } from './config'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
+import TagChips from './components/TagChips'
 import { toDateStr } from './utils/date'
 import './App.css'
 
@@ -80,6 +80,10 @@ function App() {
   const [steps,        setSteps]        = useState([])
   const [stepsLoading, setStepsLoading] = useState(true)
 
+  // Etiquetas do painel ativo, aplicáveis ao card no submit
+  const [panelTags,      setPanelTags]      = useState([])
+  const [selectedTagIds, setSelectedTagIds] = useState(new Set())
+
   // Contato / card
   const [contactId,    setContactId]    = useState(null)
   const [existingCard, setExistingCard] = useState(null)
@@ -140,31 +144,11 @@ function App() {
         setClinicLoading(false)
         setDataLoading(true)
 
-
         // Seleciona unidade padrão (primeira disponível)
         const defaultUnit = config.units?.[0] ?? null
         if (defaultUnit) setSelectedUnitId(defaultUnit.id)
 
-        // Steps vêm do banco se disponíveis e com nomes válidos
-        const rawCached = defaultUnit?.steps?.length
-          ? defaultUnit.steps
-          : config.steps ?? []
-        // Descarta cache se os nomes estiverem vazios (registro incompleto)
-        const cachedSteps = rawCached.filter(s => s.name?.trim())
-
-        const loadPanel = (cachedSteps.length > 0
-          ? Promise.resolve({ steps: cachedSteps })
-          : getPanelData(defaultUnit?.panelId ?? config.panelId, conta)
-        ).then(({ steps }) => {
-            setSteps(steps)
-          })
-          .catch(err => {
-            console.error('Erro ao carregar painel:', err)
-            setMessage({ type: 'error', text: `Erro ao carregar etapas: ${err.message}` })
-          })
-          .finally(() => setStepsLoading(false))
-
-        const tasks = [loadPanel]
+        const tasks = []
 
         if (cid) {
           setContactId(cid)
@@ -192,6 +176,36 @@ function App() {
         setClinicLoading(false)
       })
   }, [])
+
+  // ── Steps + etiquetas do painel da unidade ativa ──────────────
+  // As etiquetas vivem no painel (não no banco), então sempre busca na API.
+  // Steps preferem o cache do banco quando os nomes são válidos.
+  useEffect(() => {
+    if (!idconta || !clinicConfig) return
+    const unit = clinicConfig.units?.find(u => u.id === selectedUnitId)
+      ?? clinicConfig.units?.[0]
+      ?? null
+    const panelId   = unit?.panelId ?? clinicConfig.panelId
+    const rawCached = unit?.steps?.length ? unit.steps : clinicConfig.steps ?? []
+    // Descarta cache se os nomes estiverem vazios (registro incompleto)
+    const cachedSteps = rawCached.filter(s => s.name?.trim())
+
+    setStepsLoading(true)
+    getPanelData(panelId, idconta)
+      .then(({ steps: apiSteps, tags }) => {
+        setSteps(cachedSteps.length > 0 ? cachedSteps : apiSteps)
+        setPanelTags(tags)
+        // Mantém só as seleções que existem no painel atual
+        setSelectedTagIds(prev => new Set([...prev].filter(id => tags.some(t => t.id === id))))
+      })
+      .catch(err => {
+        console.error('Erro ao carregar painel:', err)
+        setPanelTags([])
+        if (cachedSteps.length > 0) setSteps(cachedSteps)
+        else setMessage({ type: 'error', text: `Erro ao carregar etapas: ${err.message}` })
+      })
+      .finally(() => setStepsLoading(false))
+  }, [idconta, clinicConfig, selectedUnitId])
 
   // ── Busca slots ao selecionar data ───────────────────────────
   useEffect(() => {
@@ -221,6 +235,15 @@ function App() {
     setSelectedSlot(null)
   }
 
+  const toggleTag = (tagId) => {
+    setSelectedTagIds(prev => {
+      const next = new Set(prev)
+      if (next.has(tagId)) next.delete(tagId)
+      else next.add(tagId)
+      return next
+    })
+  }
+
   const handleNext = (e) => {
     e.preventDefault()
     if (!nome.trim()) return
@@ -245,12 +268,17 @@ function App() {
 
       const card       = await findCardByContact(contactId, idconta).catch(() => null)
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
+      const pickedTags  = [...selectedTagIds]
 
       if (card) {
-        await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime)
+        // Mescla com as etiquetas que o card já tem para não removê-las
+        const mergedTags = pickedTags.length > 0
+          ? [...new Set([...(card.tagIds ?? []), ...pickedTags])]
+          : null
+        await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime, mergedTags)
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime)
+        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime, pickedTags)
       }
 
       let clinicorpStatus = null
@@ -289,6 +317,7 @@ function App() {
       setSelectedSlot(null)
       setAvailableSlots([])
       setDescricao('')
+      setSelectedTagIds(new Set())
       setExistingCard(null)
       setTimeout(() => setMessage(null), clinicorpStatus && clinicorpStatus !== 'ok' ? 12000 : 6000)
     } catch (err) {
@@ -318,7 +347,7 @@ function App() {
 
   return (
     <div className="page">
-      {dataLoading && (
+      {(dataLoading || stepsLoading) && (
         <div className="data-loading-overlay">
           <span className="spinner spinner-dark" />
           <span>Carregando dados...</span>
@@ -387,11 +416,7 @@ function App() {
                           className={`unit-btn${selectedUnitId === unit.id ? ' unit-btn-active' : ''}`}
                           onClick={() => {
                             setSelectedUnitId(unit.id)
-                            // Atualiza steps se a unidade tiver painel próprio
-                            const unitSteps = unit.steps?.length ? unit.steps : clinicConfig.steps ?? []
-                            setSteps(unitSteps)
-                            if (unitSteps.length > 0) setSelectedStepId(unitSteps[0].id)
-                            // Limpa slots ao trocar unidade
+                            // Steps/etiquetas recarregam via effect; limpa slots da unidade anterior
                             setSelectedDate(null)
                             setSelectedSlot(null)
                             setAvailableSlots([])
@@ -511,6 +536,17 @@ function App() {
                   </div>
                 )
               })()}
+
+              {panelTags.length > 0 && (
+                <div className="tags-section">
+                  <span className="form-section-label">Etiquetas do card</span>
+                  <TagChips
+                    tags={panelTags}
+                    selectedIds={selectedTagIds}
+                    onToggle={toggleTag}
+                  />
+                </div>
+              )}
 
               <div className="step2-actions">
                 <button type="button" className="btn-secondary" onClick={() => setUiStep(1)}>
