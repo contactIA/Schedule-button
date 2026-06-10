@@ -135,9 +135,12 @@ function App() {
     return getPanelData(panelId, idconta)
       .then(({ steps: apiSteps, tags }) => {
         setSteps(cachedSteps.length > 0 ? cachedSteps : apiSteps)
-        setPanelTags(tags)
+        // Restringe às etiquetas liberadas no onboarding (null = todas)
+        const allowed = config.panels?.find(p => p.id === panelId)?.allowedTagIds
+        const visibleTags = Array.isArray(allowed) ? tags.filter(t => allowed.includes(t.id)) : tags
+        setPanelTags(visibleTags)
         // Mantém só as seleções que existem no painel atual
-        setSelectedTagIds(prev => new Set([...prev].filter(id => tags.some(t => t.id === id))))
+        setSelectedTagIds(prev => new Set([...prev].filter(id => visibleTags.some(t => t.id === id))))
       })
       .catch(err => {
         console.error('Erro ao carregar painel:', err)

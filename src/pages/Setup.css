@@ -507,6 +507,40 @@
   background: #fdfcff;
 }
 
+/* ── Etiquetas permitidas (config do painel) ── */
+.tag-pick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tag-pick:hover:not(.tag-pick-active) {
+  border-color: #9333EA;
+  color: #7C3AED;
+  background: #faf5ff;
+}
+
+.tag-pick-active {
+  border-color: transparent;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+
 /* ── Unit Cards ── */
 .units-list {
   display: flex;

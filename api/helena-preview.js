@@ -20,9 +20,9 @@ export default async function handler(req, res) {
   if (!token) return res.status(400).json({ error: 'Parâmetro token obrigatório' })
 
   try {
-    // v2/panel com IncludeDetails=Steps retorna painéis + etapas em uma única chamada
+    // v2/panel com IncludeDetails retorna painéis + etapas + etiquetas em uma única chamada
     const { ok, body } = await helenaGet(
-      '/crm/v2/panel?IncludeDetails=Steps&PageSize=100', token
+      '/crm/v2/panel?IncludeDetails=Steps&IncludeDetails=Tags&PageSize=100', token
     )
 
     if (!ok) {
@@ -37,7 +37,13 @@ export default async function handler(req, res) {
       steps: (panel.steps ?? [])
         .filter(s => !s.archived)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map(s => ({ id: s.id, title: s.title || s.name || s.stepName || s.label || s.id }))
+        .map(s => ({ id: s.id, title: s.title || s.name || s.stepName || s.label || s.id })),
+      tags: (panel.tags ?? []).map(t => ({
+        id:        t.id,
+        name:      (t.name ?? t.title ?? '').trim(),
+        nameColor: t.nameColor || '#fff',
+        bgColor:   t.bgColor   || '#9333EA',
+      })),
     }))
 
     if (panels.length === 0) {

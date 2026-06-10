@@ -36,6 +36,8 @@ export default async function handler(req, res) {
           id:            p.id,
           name:          p.name,
           agendadoStepId: p.agendadoStepId,
+          // null = sem restrição (clínicas cadastradas antes do recurso)
+          allowedTagIds: Array.isArray(p.allowedTagIds) ? p.allowedTagIds : null,
           // Steps vêm do banco clínica (todos os painéis compartilham os steps do painel principal por ora)
           steps:         clinicSteps,
         }))
@@ -43,6 +45,7 @@ export default async function handler(req, res) {
           id:            clinic.helena_panel_id,
           name:          clinic.name,
           agendadoStepId: clinic.helena_agendado_step_id,
+          allowedTagIds: null,
           steps:         clinicSteps,
         }]
 

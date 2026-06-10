@@ -90,12 +90,24 @@ function AdminForm({ onSuccess }) {
         displayName:   panel.title || panel.name || '',
         agendadoStepId: panel.steps?.[0]?.id ?? '',
         steps:         panel.steps ?? [],
+        tags:          panel.tags  ?? [],
+        // Todas permitidas por padrão; admin desmarca as restritas
+        allowedTagIds: (panel.tags ?? []).map(t => t.id),
       }]
     })
   }
 
   const updatePickedPanel = (id, field, value) =>
     setPickedPanels(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
+
+  const togglePanelTag = (panelId, tagId) =>
+    setPickedPanels(prev => prev.map(p => {
+      if (p.id !== panelId) return p
+      const allowed = p.allowedTagIds.includes(tagId)
+        ? p.allowedTagIds.filter(id => id !== tagId)
+        : [...p.allowedTagIds, tagId]
+      return { ...p, allowedTagIds: allowed }
+    }))
 
   // Unidades Clinicorp (multi-unidade)
   const [units, setUnits] = useState([{
@@ -170,11 +182,12 @@ function AdminForm({ onSuccess }) {
           helenaPanelId:   pickedPanels[0]?.id ?? '',
           agendadoStepId:  pickedPanels[0]?.agendadoStepId ?? '',
           helenaSteps:     (pickedPanels[0]?.steps ?? []).map(s => ({ id: s.id, name: s.title || s.name || s.id })),
-          // Todos os painéis escolhidos com seus nomes e steps
+          // Todos os painéis escolhidos com seus nomes, steps e etiquetas permitidas
           helenaPanels: pickedPanels.map(p => ({
             id:            p.id,
             name:          p.displayName || p.name,
             agendadoStepId: p.agendadoStepId,
+            allowedTagIds: p.allowedTagIds,
           })),
           units: units.map(u => ({
             name:            u.name,
@@ -358,6 +371,30 @@ function AdminForm({ onSuccess }) {
                                     <option key={s.id} value={s.id}>{s.title || s.name || s.id}</option>
                                   ))}
                                 </select>
+                              </div>
+                            )}
+                            {picked.tags.length > 0 && (
+                              <div className="admin-field">
+                                <label>Etiquetas que o operador pode aplicar</label>
+                                <div className="tag-pick-grid">
+                                  {picked.tags.map(tag => {
+                                    const allowed = picked.allowedTagIds.includes(tag.id)
+                                    return (
+                                      <button
+                                        key={tag.id}
+                                        type="button"
+                                        className={`tag-pick${allowed ? ' tag-pick-active' : ''}`}
+                                        style={allowed ? { background: tag.bgColor, color: tag.nameColor } : undefined}
+                                        onClick={() => togglePanelTag(panel.id, tag.id)}
+                                      >
+                                        {allowed ? '✓ ' : ''}{tag.name}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                <span className="admin-field-hint">
+                                  Desmarque as etiquetas que o operador não deve poder aplicar.
+                                </span>
                               </div>
                             )}
                           </div>
