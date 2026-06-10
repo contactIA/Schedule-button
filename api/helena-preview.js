@@ -1,3 +1,6 @@
+import { getSupabase } from './_supabase.js'
+import { requireAdmin } from './_auth.js'
+
 const HELENA_BASE = 'https://api.wts.chat'
 
 async function helenaGet(path, token) {
@@ -15,9 +18,18 @@ export default async function handler(req, res) {
   res.setHeader('Pragma', 'no-cache')
 
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (!requireAdmin(req, res)) return
 
-  const token = req.query?.token
-  if (!token) return res.status(400).json({ error: 'Parâmetro token obrigatório' })
+  // Token direto (cadastro) ou clinicId (edição — token carregado do banco)
+  let token = req.query?.token
+  const clinicId = req.query?.clinicId
+  if (!token && clinicId) {
+    const db = getSupabase()
+    const { data } = await db.from('clinics').select('helena_token').eq('id', clinicId).limit(1)
+    token = data?.[0]?.helena_token
+    if (!token) return res.status(404).json({ error: 'Clínica não encontrada ou sem token.' })
+  }
+  if (!token) return res.status(400).json({ error: 'Parâmetro token ou clinicId obrigatório' })
 
   try {
     // v2/panel com IncludeDetails retorna painéis + etapas + etiquetas em uma única chamada

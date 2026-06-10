@@ -4,6 +4,7 @@
     "api/clinicorp.js": { "maxDuration": 15 },
     "api/setup.js":    { "maxDuration": 30 },
     "api/clinic.js":         { "maxDuration": 10 },
+    "api/clinics.js":        { "maxDuration": 10 },
     "api/helena-preview.js": { "maxDuration": 10 }
   },
   "rewrites": [

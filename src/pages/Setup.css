@@ -541,6 +541,147 @@
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
 }
 
+/* ── Lista de clínicas ── */
+.clinic-flash {
+  margin: 0 0 4px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clinic-empty {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 18px 0;
+}
+
+.clinic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clinic-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+
+.clinic-row:hover { border-color: #9333EA; }
+
+.clinic-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.clinic-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.clinic-row-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clinic-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.clinic-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.clinic-status-off {
+  background: #f8fafc;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+}
+
+.clinic-edit-btn {
+  padding: 7px 16px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.clinic-edit-btn:hover {
+  border-color: #9333EA;
+  color: #7C3AED;
+  background: #faf5ff;
+}
+
+/* ── Edição de clínica ── */
+.edit-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 28px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.edit-units-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-unit-chip {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.edit-unit-chip-off {
+  color: #cbd5e1;
+  text-decoration: line-through;
+}
+
+.success-actions {
+  display: flex;
+  gap: 10px;
+  margin: 24px 28px 32px;
+}
+
+.success-actions .admin-btn-secondary { flex: 1; }
+
 /* ── Unit Cards ── */
 .units-list {
   display: flex;

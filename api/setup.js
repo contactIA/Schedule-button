@@ -1,4 +1,5 @@
 import { getSupabase } from './_supabase.js'
+import { requireAdmin } from './_auth.js'
 
 const HELENA_BASE    = 'https://api.wts.chat'
 const CLINICORP_BASE = 'https://api.clinicorp.com/rest/v1'
@@ -72,6 +73,7 @@ async function fetchProfessionals(user, token, subscriberId) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!requireAdmin(req, res)) return
 
   const {
     clinicName,
