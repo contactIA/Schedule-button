@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  createCard, getContact, findCardByContact,
+  createCard, getContact, findCardByContact, findContactByPhone,
   updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
 import { fetchClinicorpSlots, fetchClinicorpDays, scheduleClinicorp } from './services/clinicorp'
@@ -110,6 +110,12 @@ function App() {
 
   // Contato / card
   const [existingCard, setExistingCard] = useState(null)
+  // Contato vinculado: vem da URL ou da busca manual por telefone
+  const [activeContactId,  setActiveContactId]  = useState(contactId)
+  const [linkedContact,    setLinkedContact]    = useState(null)
+  const [contactSearch,    setContactSearch]    = useState('')
+  const [searchingContact, setSearchingContact] = useState(false)
+  const [contactSearchMsg, setContactSearchMsg] = useState('')
 
   // Calendário
   const [viewYear,  setViewYear]  = useState(today.getFullYear())
@@ -283,6 +289,46 @@ function App() {
     setUiStep(2)
   }
 
+  // ── Busca manual de contato por telefone (sem ?contactId= na URL) ──
+  const handleSearchContact = async () => {
+    const digits = contactSearch.replace(/\D/g, '')
+    if (digits.length < 10) {
+      setContactSearchMsg('Digite o telefone com DDD.')
+      return
+    }
+    setSearchingContact(true)
+    setContactSearchMsg('')
+    try {
+      const contact = await findContactByPhone(digits, idconta)
+      if (!contact?.id) {
+        setContactSearchMsg('Nenhum contato encontrado — o card será criado sem vínculo no CRM.')
+        if (!telefone.trim()) setTelefone(digits)
+        return
+      }
+      setActiveContactId(contact.id)
+      setLinkedContact({ id: contact.id, name: contact.name || 'Contato sem nome' })
+      if (contact.name) setNome(contact.name)
+      const phone = contact.phone || contact.phoneNumber || contact.mobilePhone || ''
+      setTelefone(stripCountryCode(phone) || digits)
+      setPhonePrivate(false)
+      const card = await findCardByContact(contact.id, idconta, activeUnit?.panelId ?? clinicConfig?.panelId)
+        .catch(() => null)
+      setExistingCard(card)
+    } catch (err) {
+      console.error('[Helena] Busca de contato:', err)
+      setContactSearchMsg(`⚠ ${err.message}`)
+    } finally {
+      setSearchingContact(false)
+    }
+  }
+
+  const handleUnlinkContact = () => {
+    setActiveContactId(null)
+    setLinkedContact(null)
+    setExistingCard(null)
+    setContactSearchMsg('')
+  }
+
   const handleSubmit = async (e) => {
     e?.preventDefault?.()
     if (!nome.trim()) return
@@ -298,7 +344,7 @@ function App() {
         finalDescription = line + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
       }
 
-      const card       = await findCardByContact(contactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
+      const card       = await findCardByContact(activeContactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
       const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
       const pickedTags  = [...selectedTagIds]
 
@@ -310,7 +356,7 @@ function App() {
         await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime, mergedTags)
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, contactId, idconta, dueDateTime, pickedTags)
+        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, activeContactId, idconta, dueDateTime, pickedTags)
       }
 
       let clinicorpStatus = null
@@ -491,7 +537,7 @@ function App() {
                             setSelectedUnitId(unit.id)
                             loadPanelData(clinicConfig, unit.id)
                             // Card existente depende do painel da unidade
-                            findCardByContact(contactId, idconta, unit.panelId ?? clinicConfig.panelId)
+                            findCardByContact(activeContactId, idconta, unit.panelId ?? clinicConfig.panelId)
                               .then(card => setExistingCard(card))
                               .catch(() => setExistingCard(null))
                             // Limpa slots e disponibilidade da unidade anterior
@@ -506,6 +552,44 @@ function App() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Busca manual — só quando a URL não traz contactId */}
+                {!contactId && (
+                  <div className="form-section">
+                    <span className="form-section-label">Contato no CRM</span>
+                    {linkedContact ? (
+                      <div className="contact-linked">
+                        <span>✓ Vinculado a <strong>{linkedContact.name}</strong></span>
+                        <button type="button" className="contact-unlink-btn" onClick={handleUnlinkContact}>
+                          desvincular
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="form-group">
+                        <label>Buscar contato por telefone</label>
+                        <div className="contact-search-row">
+                          <input
+                            type="tel"
+                            value={contactSearch}
+                            onChange={e => { setContactSearch(e.target.value); setContactSearchMsg('') }}
+                            placeholder="Ex: (92) 98765-4321"
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary contact-search-btn"
+                            disabled={searchingContact || !contactSearch.trim()}
+                            onClick={handleSearchContact}
+                          >
+                            {searchingContact
+                              ? <span className="btn-loading"><span className="spinner spinner-dark" /></span>
+                              : 'Buscar'}
+                          </button>
+                        </div>
+                        {contactSearchMsg && <span className="field-hint">{contactSearchMsg}</span>}
+                      </div>
+                    )}
                   </div>
                 )}
 
