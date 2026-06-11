@@ -506,7 +506,7 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
           <div className="admin-field">
             <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
             <input type="text" value={codeLink}
-              onChange={e => setCodeLink(e.target.value.replace(/\D/g, ''))}
+              onChange={e => setCodeLink(e.target.value.trim())}
               placeholder="Buscado automaticamente" />
           </div>
 
