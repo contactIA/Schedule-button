@@ -18,13 +18,20 @@ O operador abre a tela a partir de um contato no WhatsApp (via URL com `?idconta
 ```
 Etapa 1 — Formulário
   • Nome e telefone pré-preenchidos via API Helena (DDI +55 removido)
+  • Sem contactId na URL → busca manual de contato por telefone
+    (vincula/desvincula o contato encontrado no CRM)
+  • Histórico do paciente no Clinicorp ao digitar o telefone
+    (últimos agendamentos com data, hora, dentista e status)
   • Números privados/mascarados (@lid) exigem preenchimento manual
   • Se o contato já tem card aberto → fluxo vira "Mover Card"
   • Seletor de unidade (visível apenas com 2+ unidades)
   • Campo livre de observações
 
 Etapa 2 — Calendário
+  • Dias sem agenda aberta no Clinicorp aparecem desabilitados
   • Navegação por mês; clique no dia busca horários no Clinicorp em tempo real
+  • Filtro por dentista quando há 2+ profissionais no dia
+    ("Qualquer disponível" + primeiro nome de cada um)
   • Slots exibidos por dentista (ex: 08:00 → 09:00 · Alex)
   • Etiquetas do painel como chips clicáveis (cores reais do Helena)
   • Confirma com ou sem horário:
@@ -36,6 +43,7 @@ Etapa 2 — Calendário
 1. Busca card existente do contato → **cria** (com `tagIds`) ou **move** para a etapa "Agendado" configurada
 2. Etiquetas selecionadas são **mescladas** com as que o card já tem — nada é removido
 3. Se houver slot: busca paciente no Clinicorp pelo telefone → cria se não existir → cria o agendamento (cor e categoria configuráveis por unidade; padrão `#ffff00` / `AVALIAÇÃO`)
+4. Com o Clinicorp confirmado e o lembrete ativado na clínica: agenda mensagem de template por WhatsApp via app "Mensagens agendadas" do Helena — na véspera às HH:MM, X horas antes ou logo após o agendamento. **Falha no lembrete nunca desfaz card/agendamento** (aviso amarelo ao operador)
 
 ---
 
@@ -82,7 +90,7 @@ Frontend (browser)
   → /api/clinicorp  ← injeta credenciais Clinicorp da unit → api.clinicorp.com
 ```
 
-As únicas variáveis de ambiente na Vercel são `SUPABASE_URL` e `SUPABASE_SERVICE_KEY` (mais `VITE_ADMIN_PASSWORD`, que protege apenas a UI do `/setup`).
+As variáveis de ambiente na Vercel são `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` e `ADMIN_PASSWORD` — esta última validada **no servidor** (header `x-admin-key`, fail-closed) em todas as rotas admin. Tokens Helena/Clinicorp são write-only nas rotas admin: entram via POST/PUT, nunca voltam em GET.
 
 ### Schema do banco (Supabase)
 
@@ -99,6 +107,7 @@ clinics (
   helena_steps jsonb,              -- cache das etapas [{ id, name }]
   helena_tags jsonb,               -- cache de etiquetas
   helena_panels jsonb,             -- painéis escolhidos no onboarding
+  scheduled_message jsonb,         -- config do lembrete de agendamento (opcional)
   active boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 )
@@ -135,9 +144,11 @@ professionals (
 
 ---
 
-## Onboarding de uma nova clínica (`/setup`)
+## Painel admin (`/setup`)
 
-Página protegida por senha. Wizard de 3 passos:
+Página protegida por senha server-side. Abre na **lista de clínicas cadastradas**, com edição completa e cadastro de novas.
+
+### Cadastro — wizard de 3 passos
 
 ```
 1. Dados da clínica
@@ -146,7 +157,10 @@ Página protegida por senha. Wizard de 3 passos:
 2. Helena / WTS.chat
    → cola o token → "Verificar" lista os painéis da conta
    → admin seleciona os painéis e, em cada um, a etapa que aciona o Clinicorp
+     e as etiquetas que o operador pode aplicar
    → companyId (idconta) e etiquetas são detectados automaticamente
+   → opcional: lembrete de agendamento (canal, modelo aprovado,
+     variáveis e regra de envio)
 
 3. Unidades Clinicorp (1 ou mais)
    → usuário + token da API por unidade
@@ -154,6 +168,15 @@ Página protegida por senha. Wizard de 3 passos:
    → opcional: painel Helena e etapa próprios da unidade
    → profissionais importados automaticamente
 ```
+
+### Edição de clínica
+
+- Nome, slug, token Helena (write-only), painéis/etapas/etiquetas, lembrete
+- **Status da clínica**: ativar/desativar (inativa não carrega no botão)
+- **Unidades**: criar, editar credenciais (token write-only), ativar/desativar;
+  trocar credencial revalida businessId/codeLink no Clinicorp automaticamente;
+  a última unidade ativa não pode ser desativada
+- **Profissionais**: sincronizar novos com o Clinicorp e marcar dentistas avaliadores
 
 Ao salvar, exibe a URL final:
 
@@ -174,24 +197,28 @@ src/
     SlotPicker.jsx    — Lista de horários disponíveis do Clinicorp
     TagChips.jsx      — Chips de etiquetas do painel (cores reais do Helena)
   pages/
-    Setup.jsx         — Onboarding admin (/setup): senha + wizard de 3 passos
+    Setup.jsx         — Painel admin (/setup): lista, edição e wizard de cadastro
     Setup.css
   services/
     helena.js         — Chamadas à API WTS.chat via /api/proxy
     clinicorp.js      — Chamadas ao handler /api/clinicorp
   utils/
-    date.js           — Helper toDateStr compartilhado
+    date.js           — Helpers toDateStr/toBrDate compartilhados
   App.jsx             — Fluxo do operador (2 etapas)
   App.css
   main.jsx            — Entry point (rota /setup vs app)
 
 api/
   _supabase.js        — Client Supabase + queries de clínica/unidade
+  _auth.js            — requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
+  _clinicorp.js       — fetchBusinessId/fetchProfessionals compartilhados
   clinic.js           — Config pública da clínica por idconta (sem tokens)
   proxy.js            — Proxy Helena (injeta token da clínica, resolve CORS)
-  clinicorp.js        — Horários disponíveis + criação de paciente/agendamento
+  clinicorp.js        — Slots, dias disponíveis, histórico do paciente e agendamento
   setup.js            — Cadastro de clínica + unidades (auto-fetch de IDs)
-  helena-preview.js   — Valida token Helena e lista painéis/etapas (wizard)
+  clinics.js          — Lista/detalhe/edição de clínicas + sync de profissionais (admin)
+  units.js            — Criação/edição/ativação de unidades (admin)
+  helena-preview.js   — Painéis, canais e modelos da conta Helena (admin)
 
 Docs/
   clinicorp-api-docs/        — Documentação da API Clinicorp
@@ -210,23 +237,27 @@ Base URL: `https://api.wts.chat`
 | Método | Endpoint | Finalidade |
 |---|---|---|
 | GET | `/core/v1/contact/{id}` | Nome e telefone do contato |
+| GET | `/core/v1/contact/phonenumber/{phone}` | Busca manual de contato por telefone |
 | GET | `/crm/v1/panel/card?ContactId=...` | Verifica se já existe card |
 | GET | `/crm/v2/panel?IncludeDetails=Steps,Tags` | Etapas e etiquetas do painel |
 | POST | `/crm/v1/panel/card` | Cria card (com `tagIds`) |
 | PUT | `/crm/v2/panel/card/{id}` | Move card de etapa + atualiza `tagIds` |
 | POST | `/crm/v1/panel/card/{id}/note` | Adiciona anotação ao card |
+| POST | `/chat/v1/scheduled-message` | Agenda o lembrete de WhatsApp |
 
 ### API Clinicorp — via `/api/clinicorp`
 Base URL: `https://api.clinicorp.com/rest/v1`
 
 | Método | Endpoint | Finalidade |
 |---|---|---|
+| GET | `/appointment/get_avaliable_days` | Dias com agenda aberta (calendário) |
 | GET | `/appointment/get_avaliable_times_calendar` | Horários disponíveis por data |
+| GET | `/appointment/list?patientId=...` | Histórico de agendamentos do paciente |
 | GET | `/patient/get?Phone=...` | Busca paciente pelo telefone |
 | POST | `/patient/create` | Cria paciente se não existir |
 | POST | `/appointment/create_appointment_by_api` | Cria o agendamento |
-| GET | `/business/list` | businessId/codeLink no onboarding |
-| GET | `/professional/list_all_professionals` | Importa dentistas no onboarding |
+| GET | `/business/list` | businessId/codeLink no onboarding e na troca de credencial |
+| GET | `/professional/list_all_professionals` | Importa/sincroniza dentistas |
 
 ---
 
@@ -245,7 +276,7 @@ vercel dev             # sobe frontend + functions com .env.local
 ```
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
-VITE_ADMIN_PASSWORD=...
+ADMIN_PASSWORD=...
 ```
 
 Teste com clínica e contato reais:
@@ -254,7 +285,7 @@ Teste com clínica e contato reais:
 http://localhost:3000?idconta=<ID_CONTA_HELENA>&contactId=<UUID_DO_CONTATO>
 ```
 
-Sem `contactId`, o formulário funciona mas não pré-preenche nome/telefone nem vincula ao contato no CRM.
+Sem `contactId`, o passo 1 mostra a busca manual de contato por telefone — dá para vincular um contato do CRM ou seguir sem vínculo.
 
 ```bash
 npm run lint    # ESLint (zero problemas)
@@ -269,23 +300,33 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 
 - Funções em `api/` viram Serverless Functions (timeouts por função em `vercel.json`)
 - Rewrite de `/setup` → SPA configurado em `vercel.json`
-- Variáveis de ambiente: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `VITE_ADMIN_PASSWORD`
+- Variáveis de ambiente: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`
+  (`VITE_ADMIN_PASSWORD` é obsoleta e pode ser removida do dashboard)
 
 ---
 
-## Roadmap (resumo)
+## Roadmap
 
-Ver `Docs/ROADMAP.md` para a lista completa.
-
-- Painel de edição de clínicas já cadastradas no `/setup`
-- Seletor de dentista avaliador no calendário (filtro por profissional)
-- Confirmação automática por WhatsApp após o agendamento
-- Dias sem disponibilidade desabilitados no calendário
-- Busca manual de contato por telefone (uso sem `contactId`)
+🎉 **Roadmap v1 concluído em junho/2026** — todas as iniciativas planejadas foram entregues. Ver `Docs/ROADMAP.md` para o histórico completo.
 
 ---
 
 ## Changelog
+
+### 2026-06-11 — Roadmap v1 concluído
+
+- **Dias com agenda aberta no calendário**: dias sem disponibilidade no Clinicorp aparecem desabilitados (`get_avaliable_days`); sem dado, o calendário segue todo clicável
+- **Filtro por dentista nos horários**: chips "Qualquer disponível" + primeiro nome de cada profissional, exibidos só com 2+ dentistas no dia
+- **Painel admin fases 2 e 3**: editor de unidades (criar, editar credenciais write-only, ativar/desativar, revalidação automática de businessId/codeLink), marcação de dentistas avaliadores com sync do Clinicorp e toggle de clínica ativa/inativa
+- **Busca manual de contato por telefone**: uso sem `contactId` na URL (ex.: ligação inbound), com vínculo/desvínculo do contato encontrado
+- **Histórico do paciente**: resumo compacto dos agendamentos no Clinicorp abaixo do campo de telefone (debounce de 700ms)
+- Docs atualizadas (CLAUDE.md multi-tenant, ROADMAP fechado) e lint zerado
+
+### 2026-06-10 (noite) — Lembrete de agendamento via WhatsApp
+
+- Config por clínica (jsonb `clinics.scheduled_message`): canal, modelo aprovado, mapeamento de variáveis ([NOME] → nome do paciente etc.) e regra de envio (véspera às HH:MM, X horas antes ou logo após)
+- Envio via app "Mensagens agendadas" do Helena após o Clinicorp confirmar; falha no lembrete nunca desfaz card/agendamento
+- Painel admin: auth server-side (`ADMIN_PASSWORD` via `x-admin-key`), lista de clínicas e edição (fase 1)
 
 ### 2026-06-10 — Etiquetas no card + lint zerado
 
