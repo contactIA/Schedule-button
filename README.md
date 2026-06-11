@@ -61,6 +61,22 @@ Sem TypeScript — projeto em JavaScript puro.
 
 ---
 
+## Identidade visual
+
+O gradiente roxo→vermelho da marca é aplicado em todo o app (botões primários, chips selecionados, cabeçalhos). Os tokens vivem no `:root` de `src/App.css` e `src/pages/Setup.css`:
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--brand` | `linear-gradient(135deg, #7C3AED 0%, #C026D3 50%, #DC2626 100%)` | Fundos de destaque (botões, chips ativos, headers) |
+| `--brand-solid` | `#9333EA` | Bordas e estados de foco/hover |
+| `--brand-light` | `#faf5ff` | Fundo suave em hover |
+| `--brand-text` | `#7C3AED` | Textos com cor da marca |
+| `--brand-border` | `rgba(147, 51, 234, 0.3)` | Anel de foco em inputs/selects |
+
+Cores de apoio: cinzas do Tailwind (`#e2e8f0` bordas, `#94a3b8`/`#475569` textos secundários), verde `#16a34a` (sucesso/visível), vermelho `#dc2626` (erros e ações destrutivas).
+
+---
+
 ## Arquitetura white-label
 
 A clínica é identificada pelo `idconta` na URL — o `companyId` da conta Helena:
