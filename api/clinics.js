@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       if (fetched.length === 0) return res.status(400).json({ error: 'Nenhum profissional retornado pelo Clinicorp.' })
 
       const { data: existing } = await db
-        .from('professionals').select('id, clinicorp_id').eq('clinic_id', id)
+        .from('professionals').select('id, clinicorp_id, active').eq('clinic_id', id)
       const known = new Set((existing ?? []).map(p => p.clinicorp_id))
       const fresh = fetched.filter(p => !known.has(p.clinicorp_id))
 
@@ -112,6 +112,18 @@ export default async function handler(req, res) {
           .from('professionals')
           .insert(fresh.map(p => ({ ...p, clinic_id: id })))
         if (error) throw new Error(error.message)
+      }
+
+      // Sync bidirecional: desativa quem saiu do agendamento online e
+      // reativa quem voltou — mantém a lista fiel ao Clinicorp
+      const fetchedIds = new Set(fetched.map(p => p.clinicorp_id))
+      const toDeactivate = (existing ?? []).filter(p => !fetchedIds.has(p.clinicorp_id) && p.active !== false).map(p => p.id)
+      const toReactivate = (existing ?? []).filter(p => fetchedIds.has(p.clinicorp_id) && p.active === false).map(p => p.id)
+      if (toDeactivate.length > 0) {
+        await db.from('professionals').update({ active: false, is_evaluator: false }).in('id', toDeactivate)
+      }
+      if (toReactivate.length > 0) {
+        await db.from('professionals').update({ active: true }).in('id', toReactivate)
       }
 
       const { data: professionals } = await db

@@ -27,13 +27,21 @@ export async function fetchBusinessId(user, token, subscriberId) {
   }
 }
 
-// Busca profissionais de uma unidade
+// Busca profissionais de uma unidade — só os habilitados no agendamento
+// online (mesma agenda usada pelo botão) e deduplicados por id
 export async function fetchProfessionals(user, token, subscriberId) {
   const auth = clinicorpAuth(user, token)
-  const { body } = await clinicorpGet(`/professional/list_all_professionals?subscriber_id=${subscriberId}`, auth)
-  return (Array.isArray(body) ? body : []).map(p => ({
-    clinicorp_id: String(p.PersonId ?? p.Id ?? p.id ?? ''),
-    name:         p.Name ?? p.name ?? '',
-    is_evaluator: false,
-  }))
+  const { body } = await clinicorpGet(`/professional/list_all_professionals?subscriber_id=${subscriberId}&fromOnlineScheduling=true`, auth)
+  const seen = new Set()
+  return (Array.isArray(body) ? body : [])
+    .map(p => ({
+      clinicorp_id: String(p.PersonId ?? p.Id ?? p.id ?? ''),
+      name:         (p.Name ?? p.name ?? '').trim(),
+      is_evaluator: false,
+    }))
+    .filter(p => {
+      if (!p.clinicorp_id || !p.name || seen.has(p.clinicorp_id)) return false
+      seen.add(p.clinicorp_id)
+      return true
+    })
 }
