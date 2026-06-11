@@ -165,6 +165,23 @@ body {
 .btn-primary:active:not(:disabled) { transform: translateY(0); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.history-box {
+  margin-top: 8px; padding: 10px 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.history-title { font-size: 12px; font-weight: 600; color: #475569; }
+.history-row {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b;
+}
+.history-date { font-weight: 500; color: #334155; }
+.history-dentist { color: #94a3b8; }
+.history-status {
+  margin-left: auto; font-size: 11px; color: #475569;
+  background: #e2e8f0; border-radius: 999px; padding: 1px 8px;
+}
+.history-more { font-size: 11px; color: #94a3b8; }
+
 .contact-search-row { display: flex; gap: 8px; }
 .contact-search-row input { flex: 1; }
 .contact-search-btn { white-space: nowrap; padding: 0 18px; }

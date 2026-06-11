@@ -23,11 +23,11 @@ export async function findContactByPhone(phone, idconta) {
   const digits = (phone || '').replace(/\D/g, '')
   // API busca pelo número completo com DDI — a UI trabalha sem o 55
   const full = digits.length <= 11 ? `55${digits}` : digits
-  const res = await proxyFetch(`/core/v1/contact?phoneNumber=${encodeURIComponent(full)}`, idconta)
+  const res = await proxyFetch(`/core/v1/contact/phonenumber/${encodeURIComponent(full)}`, idconta)
+  if (res.status === 404) return null
   if (!res.ok) throw new Error(`Erro ao buscar contato (HTTP ${res.status})`)
-  const json  = await res.json()
-  const items = Array.isArray(json) ? json : (json.items ?? [])
-  return items[0] ?? null
+  const json = await res.json()
+  return json?.id ? json : (json?.items?.[0] ?? null)
 }
 
 // Busca card aberto do contato no painel. A API exige PanelId —

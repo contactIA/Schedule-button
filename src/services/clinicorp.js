@@ -23,6 +23,18 @@ export async function fetchClinicorpDays(idconta, unitId) {
   return res.json()
 }
 
+// Agendamentos anteriores do paciente no Clinicorp (busca por telefone)
+export async function fetchClinicorpHistory(phone, idconta, unitId) {
+  const params = new URLSearchParams({ history: '1', phone, idconta })
+  if (unitId) params.set('unitId', unitId)
+  const res = await fetch(`/api/clinicorp?${params}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao buscar histórico (HTTP ${res.status})`)
+  }
+  return res.json()
+}
+
 export async function scheduleClinicorp(payload, idconta, unitId) {
   const params = new URLSearchParams({ idconta })
   if (unitId) params.set('unitId', unitId)

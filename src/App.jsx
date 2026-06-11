@@ -3,7 +3,7 @@ import {
   createCard, getContact, findCardByContact, findContactByPhone,
   updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
-import { fetchClinicorpSlots, fetchClinicorpDays, scheduleClinicorp } from './services/clinicorp'
+import { fetchClinicorpSlots, fetchClinicorpDays, fetchClinicorpHistory, scheduleClinicorp } from './services/clinicorp'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
@@ -130,6 +130,10 @@ function App() {
   // Filtro por dentista nos horários do dia (null = qualquer)
   const [selectedDentistId, setSelectedDentistId] = useState(null)
 
+  // Histórico do paciente no Clinicorp ({found, appointments} | null)
+  const [history,        setHistory]        = useState(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+
   // Submit
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -229,6 +233,27 @@ function App() {
         setClinicLoading(false)
       })
   }, [loadPanelData])
+
+  // ── Histórico do paciente — busca com debounce pelo telefone ──
+  useEffect(() => {
+    const digits = telefone.replace(/\D/g, '')
+    if (digits.length < 10 || !clinicConfig) {
+      setHistory(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      setHistoryLoading(true)
+      fetchClinicorpHistory(digits, idconta, activeUnit?.id)
+        .then(setHistory)
+        // Histórico é informativo — falha não bloqueia o fluxo
+        .catch(err => {
+          console.warn('[Clinicorp] Histórico indisponível:', err.message)
+          setHistory(null)
+        })
+        .finally(() => setHistoryLoading(false))
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [telefone, clinicConfig, activeUnit?.id])
 
   // ── Dias com agenda aberta — carregado ao entrar no calendário ──
   const loadAvailability = (unitId) => {
@@ -622,6 +647,33 @@ function App() {
                     {phoneInvalid && (
                       <span className="field-hint-error">
                         O número deste contato é privado. Digite o telefone para continuar.
+                      </span>
+                    )}
+                    {historyLoading && (
+                      <span className="field-hint">Buscando histórico no Clinicorp...</span>
+                    )}
+                    {!historyLoading && history?.found && history.appointments.length > 0 && (
+                      <div className="history-box">
+                        <span className="history-title">
+                          Histórico no Clinicorp — {history.appointments.length} agendamento(s)
+                        </span>
+                        {history.appointments.slice(0, 3).map((a, i) => (
+                          <div key={i} className="history-row">
+                            <span className="history-date">
+                              {toBrDate(a.date)}{a.from ? ` às ${a.from}` : ''}
+                            </span>
+                            {a.dentist && <span className="history-dentist">{a.dentist.split(' ')[0]}</span>}
+                            {a.status && <span className="history-status">{a.status}</span>}
+                          </div>
+                        ))}
+                        {history.appointments.length > 3 && (
+                          <span className="history-more">+ {history.appointments.length - 3} outro(s)</span>
+                        )}
+                      </div>
+                    )}
+                    {!historyLoading && history && !history.found && (
+                      <span className="field-hint">
+                        Telefone sem cadastro no Clinicorp — o paciente será criado ao agendar.
                       </span>
                     )}
                   </div>

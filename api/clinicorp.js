@@ -75,6 +75,42 @@ export default async function handler(req, res) {
   const categoryColor       = unit.clinicorp_category_color       || '#ffff00'
   const categoryDescription = unit.clinicorp_category_description || 'AVALIAÇÃO'
 
+  // ── GET ?history=1&phone=: agendamentos anteriores do paciente ──
+  if (req.method === 'GET' && req.query?.history) {
+    const phone = req.query?.phone
+    if (!phone) return res.status(400).json({ error: 'Parâmetro phone obrigatório' })
+
+    try {
+      const patient = await findPatientByPhone(phone, auth, subscriberId)
+      if (!patient) return res.status(200).json({ found: false, appointments: [] })
+
+      const fmt  = d => d.toISOString().slice(0, 10)
+      const from = new Date(); from.setFullYear(from.getFullYear() - 1)
+      const to   = new Date(); to.setMonth(to.getMonth() + 6)
+      const url = `${BASE}/appointment/list?subscriber_id=${subscriberId}` +
+        `&from=${fmt(from)}&to=${fmt(to)}&patientId=${patient.patientId}`
+      const { ok, status, body } = await clinicorpFetch(url, auth)
+      if (!ok) return res.status(status).json({
+        error: body.Message || body.message || 'Erro ao buscar histórico no Clinicorp',
+        detail: body,
+      })
+
+      const list = Array.isArray(body) ? body : (body.Appointments ?? body.appointments ?? [])
+      const appointments = list
+        .map(a => ({
+          date:    String(a.Date ?? a.date ?? '').slice(0, 10),
+          from:    normTime(a.FromTime ?? a.fromTime ?? ''),
+          status:  a.Status ?? a.status ?? '',
+          dentist: a.DentistName ?? a.Dentist_Name ?? a.dentistName ?? a.Dentist ?? '',
+        }))
+        .filter(a => a.date)
+        .sort((x, y) => (x.date < y.date ? 1 : -1))
+      return res.status(200).json({ found: true, appointments })
+    } catch (err) {
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
   // ── GET ?days=1: dias com agenda aberta ──────────────────────────
   // O Clinicorp ignora fromDate/toDate e devolve a própria janela de
   // agendamento online (de amanhã até o limite configurado).
