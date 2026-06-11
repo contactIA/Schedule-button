@@ -72,6 +72,12 @@ function ReminderConfig({ channels, templates, value, onChange }) {
   const template = templates.find(t => t.id === cfg.templateId)
   const mode = cfg.timing?.mode ?? 'day_before'
 
+  // Modelos filtrados pelo canal escolhido (modelo sem canal vale para todos);
+  // o modelo já salvo permanece visível mesmo se for de outro canal
+  const channelTemplates = templates.filter(t =>
+    !t.channelId || t.channelId === cfg.channelId || t.id === cfg.templateId
+  )
+
   return (
     <div className="admin-field">
       <label>Lembrete de agendamento</label>
@@ -97,7 +103,15 @@ function ReminderConfig({ channels, templates, value, onChange }) {
               value={cfg.channelId ?? ''}
               onChange={e => {
                 const ch = channels.find(c => c.id === e.target.value)
-                set({ channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' })
+                const patch = { channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' }
+                // Modelo do canal anterior não vale para o novo → limpa a seleção
+                const t = templates.find(x => x.id === cfg.templateId)
+                if (t?.channelId && t.channelId !== ch?.id) {
+                  patch.templateId = ''
+                  patch.templateName = ''
+                  patch.paramMap = {}
+                }
+                set(patch)
               }}
             >
               <option value="">Selecione o canal...</option>
@@ -110,6 +124,7 @@ function ReminderConfig({ channels, templates, value, onChange }) {
             <select
               className="step-select"
               value={cfg.templateId ?? ''}
+              disabled={!cfg.channelId}
               onChange={e => {
                 const t = templates.find(x => x.id === e.target.value)
                 const paramMap = {}
@@ -117,12 +132,18 @@ function ReminderConfig({ channels, templates, value, onChange }) {
                 set({ templateId: t?.id ?? '', templateName: t?.name ?? '', paramMap })
               }}
             >
-              <option value="">Selecione o modelo...</option>
-              {templates.map(t => (
+              <option value="">{cfg.channelId ? 'Selecione o modelo...' : 'Selecione primeiro o canal'}</option>
+              {channelTemplates.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-            <span className="admin-field-hint">Modelos aprovados da conta Helena.</span>
+            <span className="admin-field-hint">
+              {!cfg.channelId
+                ? 'Escolha o canal de envio para listar os modelos dele.'
+                : channelTemplates.length === 0
+                  ? 'Nenhum modelo aprovado para este canal na conta Helena.'
+                  : 'Modelos aprovados do canal selecionado.'}
+            </span>
           </div>
 
           {template?.params?.length > 0 && (
