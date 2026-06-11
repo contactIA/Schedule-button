@@ -692,7 +692,7 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
                         <button
                           key={p.id}
                           type="button"
-                          className={`tag-pick${on ? ' tag-pick-active' : ''}`}
+                          className={`tag-pick${on ? ' tag-pick-active prof-pick-active' : ''}`}
                           onClick={() => setBookableIds(prev =>
                             on ? prev.filter(x => x !== p.id) : [...prev, p.id])}
                         >
