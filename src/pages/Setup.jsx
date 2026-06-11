@@ -378,6 +378,167 @@ function ClinicList({ clinics, flash, onEdit, onNew }) {
   )
 }
 
+// ── Editor de unidade (criar + editar) ────────────────────────────
+// Token Clinicorp é write-only: o campo sempre inicia vazio e só é
+// enviado quando preenchido. Trocar credencial revalida businessId
+// e codeLink no servidor.
+function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
+  const isNew = !unit
+  const [expanded,     setExpanded]     = useState(isNew)
+  const [name,         setName]         = useState(unit?.name ?? '')
+  const [user,         setUser]         = useState(unit?.clinicorpUser ?? '')
+  const [token,        setToken]        = useState('')
+  const [subscriberId, setSubscriberId] = useState(unit?.subscriberId ?? '')
+  const [codeLink,     setCodeLink]     = useState(unit?.codeLink != null ? String(unit.codeLink) : '')
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState('')
+  const [savedOk, setSavedOk] = useState(false)
+
+  const call = async (method, body) => {
+    const res = await fetch('/api/units', {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
+    return data
+  }
+
+  const handleSave = async () => {
+    setError('')
+    let body
+    if (isNew) {
+      if (!name.trim() || !user.trim() || !token.trim()) {
+        setError('Nome, usuário e token são obrigatórios.')
+        return
+      }
+      body = {
+        clinicId,
+        name, clinicorpUser: user, clinicorpToken: token,
+        subscriberId: subscriberId || undefined,
+        codeLink:     codeLink     || undefined,
+      }
+    } else {
+      // Envia somente o que mudou — credencial intacta não revalida à toa
+      body = { id: unit.id }
+      if (name.trim() && name !== unit.name)            body.name = name
+      if (user.trim() && user !== unit.clinicorpUser)   body.clinicorpUser = user
+      if (token.trim())                                  body.clinicorpToken = token
+      if (subscriberId.trim() && subscriberId !== (unit.subscriberId ?? '')) body.subscriberId = subscriberId
+      if (codeLink.trim() && String(codeLink) !== String(unit.codeLink ?? '')) body.codeLink = codeLink
+      if (Object.keys(body).length === 1) {
+        setError('Nenhuma alteração para salvar.')
+        return
+      }
+    }
+
+    setBusy(true)
+    try {
+      const data = isNew ? await call('POST', body) : await call('PUT', body)
+      setToken('')
+      setSavedOk(true)
+      setTimeout(() => setSavedOk(false), 2500)
+      onSaved(data.unit)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleToggleActive = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const data = await call('PUT', { id: unit.id, active: !unit.active })
+      onSaved(data.unit)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`unit-card${unit && !unit.active ? ' unit-card-inactive' : ''}`}>
+      <div className="unit-card-header" onClick={() => setExpanded(v => !v)}>
+        <span className="unit-card-name">
+          {isNew ? 'Nova unidade' : (unit.name || 'Unidade')}
+          {unit && !unit.active && <span className="unit-badge-off"> inativa</span>}
+        </span>
+        <div className="unit-card-actions">
+          {isNew && onCancel && (
+            <button type="button" className="unit-remove-btn"
+              onClick={e => { e.stopPropagation(); onCancel() }}>✕</button>
+          )}
+          <span className="unit-toggle">{expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="unit-card-body">
+          <div className="admin-field">
+            <label>Nome da unidade *</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              placeholder="Ex: Unidade Centro" />
+          </div>
+
+          <div className="admin-field">
+            <label>Usuário API Clinicorp *</label>
+            <input type="text" value={user} onChange={e => setUser(e.target.value)}
+              placeholder="Ex: clinicasorriso" autoComplete="off" />
+          </div>
+
+          <div className="admin-field">
+            <label>Token API Clinicorp {isNew ? '*' : ''}</label>
+            <input type="password" value={token} onChange={e => setToken(e.target.value)}
+              placeholder={isNew ? 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' : 'Manter token atual'}
+              autoComplete="new-password" />
+            {!isNew && <span className="admin-field-hint">Preencha somente para substituir o token atual.</span>}
+          </div>
+
+          <div className="admin-field">
+            <label>Subscriber ID <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+            <input type="text" value={subscriberId} onChange={e => setSubscriberId(e.target.value.trim())} />
+          </div>
+
+          <div className="admin-field">
+            <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+            <input type="text" value={codeLink}
+              onChange={e => setCodeLink(e.target.value.replace(/\D/g, ''))}
+              placeholder="Buscado automaticamente" />
+          </div>
+
+          {!isNew && (
+            <span className="admin-field-hint">
+              businessId: <strong>{unit.businessId ?? '—'}</strong> · codeLink: <strong>{unit.codeLink ?? '—'}</strong>
+              {' '}— revalidados automaticamente ao trocar a credencial.
+            </span>
+          )}
+
+          {error   && <div className="admin-error-box">{error}</div>}
+          {savedOk && <div className="clinic-flash">✓ Unidade salva.</div>}
+
+          <div className="unit-editor-actions">
+            {!isNew && (
+              <button type="button" className="admin-btn-secondary" disabled={busy}
+                onClick={handleToggleActive}>
+                {unit.active ? 'Desativar' : 'Reativar'}
+              </button>
+            )}
+            <button type="button" className="admin-btn-primary" disabled={busy} onClick={handleSave}>
+              {busy
+                ? <span className="admin-btn-loading"><span className="admin-spinner" />Salvando...</span>
+                : isNew ? 'Criar unidade' : 'Salvar unidade'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Edição de clínica ─────────────────────────────────────────────
 function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
   const [loading,   setLoading]   = useState(true)
@@ -394,6 +555,12 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
   const [channels,     setChannels]     = useState([])
   const [templates,    setTemplates]    = useState([])
   const [reminder,     setReminder]     = useState(null)
+  const [clinicActive,  setClinicActive]  = useState(true)
+  const [units,         setUnits]         = useState([])
+  const [addingUnit,    setAddingUnit]    = useState(false)
+  const [professionals, setProfessionals] = useState([])
+  const [syncing,       setSyncing]       = useState(false)
+  const [syncMsg,       setSyncMsg]       = useState('')
 
   useEffect(() => {
     const headers = { 'x-admin-key': adminKey }
@@ -411,6 +578,9 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
         setClinic(detail)
         setName(detail.name ?? '')
         setSlug(detail.slug ?? '')
+        setClinicActive(detail.active !== false)
+        setUnits(detail.units ?? [])
+        setProfessionals(detail.professionals ?? [])
         setChannels(preview.channels ?? [])
         setTemplates(preview.templates ?? [])
         setReminder(detail.scheduledMessage ?? null)
@@ -462,6 +632,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
           id:          clinicId,
           name,
           slug,
+          active:      clinicActive,
+          evaluatorIds: professionals.filter(p => p.is_evaluator).map(p => p.id),
           helenaToken: newToken.trim() || undefined,
           // undefined → não mexe na config salva (tolera banco sem a coluna)
           scheduledMessage: reminder ?? undefined,
@@ -481,6 +653,32 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
       setSaveError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSyncProfessionals = async () => {
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const res = await fetch('/api/clinics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ id: clinicId, action: 'sync_professionals' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
+      // Preserva toggles de avaliador ainda não salvos
+      setProfessionals(prev => (data.professionals ?? []).map(p => {
+        const local = prev.find(x => x.id === p.id)
+        return local ? { ...p, is_evaluator: local.is_evaluator } : p
+      }))
+      setSyncMsg(data.added > 0
+        ? `${data.added} profissional(is) novo(s) importado(s).`
+        : 'Nenhum profissional novo no Clinicorp.')
+    } catch (err) {
+      setSyncMsg(`⚠ ${err.message}`)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -558,19 +756,89 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
             onChange={setReminder}
           />
 
-          {clinic.units?.length > 0 && (
-            <div className="admin-field">
-              <label>Unidades</label>
-              <div className="edit-units-row">
-                {clinic.units.map(u => (
-                  <span key={u.id} className={`edit-unit-chip${u.active ? '' : ' edit-unit-chip-off'}`}>
-                    {u.name}
-                  </span>
+          <div className="admin-field">
+            <label>Status da clínica</label>
+            <button
+              type="button"
+              className={`reminder-toggle${clinicActive ? ' reminder-toggle-on' : ''}`}
+              onClick={() => setClinicActive(v => !v)}
+            >
+              <span className="reminder-toggle-knob" />
+              {clinicActive ? 'Ativa' : 'Inativa'}
+            </button>
+            <span className="admin-field-hint">
+              Clínica inativa não carrega no botão de agendamento. Salvo junto com "Salvar alterações".
+            </span>
+          </div>
+
+          <div className="admin-field">
+            <label>Unidades Clinicorp</label>
+            <div className="units-list">
+              {units.map(u => (
+                <UnitEditor
+                  key={u.id}
+                  adminKey={adminKey}
+                  clinicId={clinicId}
+                  unit={u}
+                  onSaved={nu => setUnits(prev => prev.map(x => x.id === nu.id ? nu : x))}
+                />
+              ))}
+              {addingUnit && (
+                <UnitEditor
+                  adminKey={adminKey}
+                  clinicId={clinicId}
+                  unit={null}
+                  onSaved={nu => { setUnits(prev => [...prev, nu]); setAddingUnit(false) }}
+                  onCancel={() => setAddingUnit(false)}
+                />
+              )}
+            </div>
+            {!addingUnit && (
+              <button type="button" className="admin-add-unit-btn" onClick={() => setAddingUnit(true)}>
+                + Adicionar unidade
+              </button>
+            )}
+            <span className="admin-field-hint">
+              Cada unidade salva na hora, independente do botão "Salvar alterações".
+            </span>
+          </div>
+
+          <div className="admin-field">
+            <label>Profissionais — avaliadores</label>
+            {professionals.length === 0 && (
+              <span className="admin-field-hint">Nenhum profissional importado ainda. Use o botão abaixo.</span>
+            )}
+            {professionals.length > 0 && (
+              <div className="tag-pick-grid">
+                {professionals.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`tag-pick${p.is_evaluator ? ' tag-pick-active prof-pick-active' : ''}`}
+                    onClick={() => setProfessionals(prev =>
+                      prev.map(x => x.id === p.id ? { ...x, is_evaluator: !x.is_evaluator } : x))}
+                  >
+                    {p.is_evaluator ? '✓ ' : ''}{p.name}
+                  </button>
                 ))}
               </div>
-              <span className="admin-field-hint">Edição de unidades chega em uma próxima versão.</span>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              className="admin-btn-secondary"
+              style={{ width: '100%', marginTop: 8 }}
+              disabled={syncing}
+              onClick={handleSyncProfessionals}
+            >
+              {syncing
+                ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Sincronizando...</span>
+                : '↻ Sincronizar profissionais do Clinicorp'}
+            </button>
+            {syncMsg && <span className="admin-field-hint">{syncMsg}</span>}
+            <span className="admin-field-hint">
+              Marque quem faz avaliação. Salvo junto com "Salvar alterações".
+            </span>
+          </div>
 
           <div className="admin-field">
             <label>Painéis, etapas e etiquetas *</label>
