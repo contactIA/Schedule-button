@@ -880,6 +880,31 @@
   gap: 10px;
 }
 
+.admin-btn-danger {
+  padding: 10px 18px;
+  background: none;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.admin-btn-danger:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; }
+.admin-btn-danger:disabled { opacity: 0.5; cursor: default; }
+
+.admin-danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f9;
+}
+.admin-danger-zone .admin-btn-danger { align-self: flex-start; }
+
 .admin-add-unit-btn {
   width: 100%;
   padding: 11px;

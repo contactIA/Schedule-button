@@ -1,4 +1,4 @@
-export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, professionals = [] }) {
+export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, emptyMessage }) {
   if (loading) {
     return (
       <div className="slots-loading-row">
@@ -13,13 +13,12 @@ export default function SlotPicker({ loading, error, slots, selectedSlot, onSele
   }
 
   if (slots.length === 0) {
-    return <p className="slots-msg">Nenhum horário disponível para esta data.</p>
+    return <p className="slots-msg">{emptyMessage || 'Nenhum horário disponível para esta data.'}</p>
   }
 
   return (
     <div className="slots-list">
       {slots.map((slot, i) => {
-        const prof    = professionals.find(p => p.id === slot.professionalId || p.clinicorp_id === slot.professionalId)
         const isActive = selectedSlot?.from === slot.from && selectedSlot?.professionalId === slot.professionalId
         return (
           <button
@@ -29,7 +28,7 @@ export default function SlotPicker({ loading, error, slots, selectedSlot, onSele
             onClick={() => onSelectSlot(isActive ? null : slot)}
           >
             <span className="slot-row-time">{slot.from} às {slot.to}</span>
-            {prof && <span className="slot-row-prof">{prof.name.split(' ')[0]}</span>}
+            {slot.professionalName && <span className="slot-row-prof">{slot.professionalName.split(' ')[0]}</span>}
           </button>
         )
       })}

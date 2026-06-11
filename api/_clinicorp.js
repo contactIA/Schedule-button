@@ -27,21 +27,20 @@ export async function fetchBusinessId(user, token, subscriberId) {
   }
 }
 
-// Busca profissionais de uma unidade (nomes exibidos junto aos horários),
-// deduplicados por id
+// Busca profissionais de uma unidade direto do Clinicorp (sempre ao vivo —
+// nomes nunca ficam desatualizados), deduplicados por id
 export async function fetchProfessionals(user, token, subscriberId) {
   const auth = clinicorpAuth(user, token)
   const { body } = await clinicorpGet(`/professional/list_all_professionals?subscriber_id=${subscriberId}`, auth)
   const seen = new Set()
   return (Array.isArray(body) ? body : [])
     .map(p => ({
-      clinicorp_id: String(p.PersonId ?? p.Id ?? p.id ?? ''),
-      name:         (p.Name ?? p.name ?? '').trim(),
-      is_evaluator: false,
+      id:   String(p.PersonId ?? p.Id ?? p.id ?? ''),
+      name: (p.Name ?? p.name ?? '').trim(),
     }))
     .filter(p => {
-      if (!p.clinicorp_id || !p.name || seen.has(p.clinicorp_id)) return false
-      seen.add(p.clinicorp_id)
+      if (!p.id || !p.name || seen.has(p.id)) return false
+      seen.add(p.id)
       return true
     })
 }

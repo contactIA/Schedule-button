@@ -125,5 +125,29 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── DELETE → exclui a clínica e tudo que depende dela ───────────
+  if (req.method === 'DELETE') {
+    const { id } = req.body ?? {}
+    if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
+
+    try {
+      const { data: clinic } = await db.from('clinics').select('id').eq('id', id).maybeSingle()
+      if (!clinic) return res.status(404).json({ error: 'Clínica não encontrada.' })
+
+      // Dependências primeiro — FKs podem não ter ON DELETE CASCADE
+      const { error: profError } = await db.from('professionals').delete().eq('clinic_id', id)
+      if (profError) throw new Error(profError.message)
+      const { error: unitError } = await db.from('units').delete().eq('clinic_id', id)
+      if (unitError) throw new Error(unitError.message)
+      const { error } = await db.from('clinics').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+
+      return res.status(200).json({ success: true })
+    } catch (err) {
+      console.error('[clinics] DELETE:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
   return res.status(405).json({ error: 'Method not allowed' })
 }

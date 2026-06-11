@@ -1,4 +1,5 @@
 import { getClinicByAccountId, getUnitById } from './_supabase.js'
+import { fetchProfessionals } from './_clinicorp.js'
 
 const BASE = 'https://api.clinicorp.com/rest/v1'
 
@@ -140,15 +141,35 @@ export default async function handler(req, res) {
 
     try {
       const url = `${BASE}/appointment/get_avaliable_times_calendar?subscriber_id=${subscriberId}&code_link=${codeLink}&date=${date}`
-      const { ok, status, body } = await clinicorpFetch(url, auth)
+      // Nomes dos profissionais buscados ao vivo da MESMA unidade dos slots —
+      // falha aqui não bloqueia os horários, só deixa os slots sem nome
+      const [{ ok, status, body }, professionals] = await Promise.all([
+        clinicorpFetch(url, auth),
+        fetchProfessionals(unit.clinicorp_user, unit.clinicorp_token, subscriberId).catch(err => {
+          console.warn('[Clinicorp] Falha ao buscar nomes dos profissionais:', err.message)
+          return []
+        }),
+      ])
       if (!ok) return res.status(status).json({
         error: body.Message || body.message || 'Erro ao buscar horários no Clinicorp',
         detail: body,
       })
+
+      const nameById = new Map(professionals.map(p => [p.id, p.name]))
+      const bookable = Array.isArray(unit.bookable_professional_ids) && unit.bookable_professional_ids.length > 0
+        ? new Set(unit.bookable_professional_ids.map(String))
+        : null
+
       const raw = Array.isArray(body) ? body : (body.AvaliableTimes ?? [])
       const slots = raw
         .filter(s => s.isSelectable !== false)
-        .map(s => ({ from: normTime(s.From), to: normTime(s.To), professionalId: String(s.ProfessionalId) }))
+        .map(s => ({
+          from: normTime(s.From),
+          to:   normTime(s.To),
+          professionalId:   String(s.ProfessionalId),
+          professionalName: nameById.get(String(s.ProfessionalId)) ?? '',
+        }))
+        .filter(s => !bookable || bookable.has(s.professionalId))
       return res.status(200).json(slots)
     } catch (err) {
       return res.status(500).json({ error: err.message })

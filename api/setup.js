@@ -1,6 +1,6 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
-import { fetchBusinessId, fetchProfessionals } from './_clinicorp.js'
+import { fetchBusinessId } from './_clinicorp.js'
 
 const HELENA_BASE = 'https://api.wts.chat'
 
@@ -149,14 +149,6 @@ export default async function handler(req, res) {
 
       if (unitError) throw new Error(`Erro ao salvar unidade "${u.name}": ${unitError.message}`)
       unitResults.push({ name: u.name, id: unit.id })
-
-      // Salva profissionais da primeira unidade (referência para o seletor de dentista)
-      if (i === 0) {
-        const professionals = await fetchProfessionals(u.clinicorpUser, u.clinicorpToken, subscriberId)
-        if (professionals.length > 0) {
-          await db.from('professionals').insert(professionals.map(p => ({ ...p, clinic_id: clinic.id })))
-        }
-      }
     }
 
     return res.status(200).json({

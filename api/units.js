@@ -1,6 +1,6 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
-import { fetchBusinessId } from './_clinicorp.js'
+import { fetchBusinessId, fetchProfessionals } from './_clinicorp.js'
 
 function toClient(u) {
   return {
@@ -12,6 +12,7 @@ function toClient(u) {
     subscriberId:  u.clinicorp_subscriber_id,
     businessId:    u.clinicorp_business_id,
     codeLink:      u.clinicorp_code_link,
+    bookableProfessionalIds: u.bookable_professional_ids ?? null,
   }
 }
 
@@ -20,6 +21,30 @@ export default async function handler(req, res) {
   if (!requireAdmin(req, res)) return
 
   const db = getSupabase()
+
+  // ── GET ?id=&professionals=1 → profissionais ao vivo do Clinicorp ─
+  // Nada de tabela sincronizada: nomes vêm direto da unidade certa.
+  if (req.method === 'GET') {
+    const { id, professionals } = req.query ?? {}
+    if (!id || !professionals) {
+      return res.status(400).json({ error: 'Use ?id=<unitId>&professionals=1' })
+    }
+    try {
+      const { data: unit } = await db.from('units').select('*').eq('id', id).maybeSingle()
+      if (!unit) return res.status(404).json({ error: 'Unidade não encontrada.' })
+
+      const list = await fetchProfessionals(
+        unit.clinicorp_user, unit.clinicorp_token, unit.clinicorp_subscriber_id
+      )
+      return res.status(200).json({
+        professionals: list,
+        bookableProfessionalIds: unit.bookable_professional_ids ?? null,
+      })
+    } catch (err) {
+      console.error('[units] GET professionals:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
 
   // ── POST → cria unidade em uma clínica existente ────────────────
   if (req.method === 'POST') {
@@ -72,7 +97,7 @@ export default async function handler(req, res) {
 
   // ── PUT → atualiza somente os campos enviados ───────────────────
   if (req.method === 'PUT') {
-    const { id, name, clinicorpUser, clinicorpToken, subscriberId, codeLink, active } = req.body ?? {}
+    const { id, name, clinicorpUser, clinicorpToken, subscriberId, codeLink, active, bookableProfessionalIds } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
     try {
@@ -97,6 +122,12 @@ export default async function handler(req, res) {
       if (subscriberId?.trim())   patch.clinicorp_subscriber_id = subscriberId.trim()
       if (codeLink !== undefined && codeLink !== null && String(codeLink).trim() !== '') {
         patch.clinicorp_code_link = String(codeLink).trim()
+      }
+      // Lista vazia vira null = todos os profissionais agendáveis
+      if (Array.isArray(bookableProfessionalIds)) {
+        patch.bookable_professional_ids = bookableProfessionalIds.length > 0
+          ? bookableProfessionalIds.map(String)
+          : null
       }
 
       // Credencial trocou → revalida businessId/codeLink no Clinicorp
@@ -126,6 +157,36 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, unit: toClient(unit) })
     } catch (err) {
       console.error('[units] PUT:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
+  // ── DELETE → exclui a unidade ───────────────────────────────────
+  if (req.method === 'DELETE') {
+    const { id } = req.body ?? {}
+    if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
+
+    try {
+      const { data: current } = await db.from('units').select('id, clinic_id, active').eq('id', id).maybeSingle()
+      if (!current) return res.status(404).json({ error: 'Unidade não encontrada.' })
+
+      // Última unidade ativa não pode ser excluída — quebraria o runtime.
+      // Para remover a clínica inteira, use a exclusão da clínica.
+      if (current.active) {
+        const { count } = await db
+          .from('units').select('id', { count: 'exact', head: true })
+          .eq('clinic_id', current.clinic_id).eq('active', true)
+        if ((count ?? 0) <= 1) {
+          return res.status(400).json({ error: 'Não é possível excluir a última unidade ativa. Exclua a clínica inteira ou cadastre outra unidade antes.' })
+        }
+      }
+
+      const { error } = await db.from('units').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+
+      return res.status(200).json({ success: true })
+    } catch (err) {
+      console.error('[units] DELETE:', err.message)
       return res.status(500).json({ error: err.message })
     }
   }

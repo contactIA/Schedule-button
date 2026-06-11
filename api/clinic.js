@@ -56,7 +56,6 @@ export default async function handler(req, res) {
       agendadoStepId: panels[0]?.agendadoStepId,
       steps:          clinicSteps,
       tags:           clinic.helena_tags  ?? [],
-      professionals:  clinic.professionals ?? [],
       // Config do lembrete — só vai ao runtime quando ativado
       scheduledMessage: clinic.scheduled_message?.enabled ? clinic.scheduled_message : null,
       panels,

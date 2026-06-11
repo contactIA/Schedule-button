@@ -127,6 +127,8 @@ function App() {
   const [selectedSlot,   setSelectedSlot]   = useState(null)
   // Dias com agenda aberta no Clinicorp (null = sem dado → tudo clicável)
   const [availability,   setAvailability]   = useState(null)
+  // Filtro por dentista nos horários do dia (null = qualquer)
+  const [selectedDentistId, setSelectedDentistId] = useState(null)
 
   // Histórico do paciente no Clinicorp ({found, appointments} | null)
   const [history,        setHistory]        = useState(null)
@@ -406,16 +408,12 @@ function App() {
       const reminderCfg = clinicConfig?.scheduledMessage
       if (clinicorpStatus === 'ok' && reminderCfg?.enabled) {
         try {
-          const prof = (clinicConfig?.professionals ?? []).find(p =>
-            String(p.clinicorp_id) === selectedSlot.professionalId ||
-            p.id === selectedSlot.professionalId
-          )
           await scheduleReminder(reminderCfg, {
             patientName: nome.trim(),
             phone:       telefone,
             dateBr:      toBrDate(selectedDate),
             time:        selectedSlot.from,
-            dentist:     prof?.name ?? '',
+            dentist:     selectedSlot.professionalName ?? '',
             clinicName:  clinicConfig?.name ?? '',
             scheduling:  reminderScheduling(reminderCfg.timing, selectedDate, selectedSlot.from),
           }, idconta)
@@ -477,7 +475,14 @@ function App() {
 
   if (clinicNotFound) return <NoClinic />
 
-  const professionals = clinicConfig?.professionals ?? []
+  // Dentistas presentes nos horários do dia — nome vem do próprio slot
+  const slotDentists = [...new Set(availableSlots.map(s => s.professionalId))].map(pid => {
+    const slot = availableSlots.find(s => s.professionalId === pid)
+    return { id: pid, name: slot?.professionalName?.split(' ')[0] || 'Profissional' }
+  })
+  const visibleSlots = selectedDentistId
+    ? availableSlots.filter(s => s.professionalId === selectedDentistId)
+    : availableSlots
 
   return (
     <div className="page">
@@ -560,6 +565,7 @@ function App() {
                             setSelectedSlot(null)
                             setAvailableSlots([])
                             setAvailability(null)
+                            setSelectedDentistId(null)
                           }}
                         >
                           {unit.name}
@@ -719,30 +725,52 @@ function App() {
                   <div className="slots-section">
                     <div className="slots-header">Horários disponíveis</div>
 
+                    {/* Filtro por dentista — só com 2+ profissionais no dia */}
+                    {!slotsLoading && slotDentists.length >= 2 && (
+                      <div className="dentist-filter">
+                        <button
+                          type="button"
+                          className={`dentist-chip${!selectedDentistId ? ' dentist-chip-active' : ''}`}
+                          onClick={() => { setSelectedDentistId(null); setSelectedSlot(null) }}
+                        >
+                          Qualquer disponível
+                        </button>
+                        {slotDentists.map(d => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            className={`dentist-chip${selectedDentistId === d.id ? ' dentist-chip-active' : ''}`}
+                            onClick={() => {
+                              setSelectedDentistId(prev => prev === d.id ? null : d.id)
+                              setSelectedSlot(null)
+                            }}
+                          >
+                            {d.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <SlotPicker
                       loading={slotsLoading}
                       error={slotsError}
-                      slots={availableSlots}
+                      slots={visibleSlots}
+                      emptyMessage={selectedDentistId && availableSlots.length > 0
+                        ? 'Nenhum horário deste dentista nesta data.'
+                        : undefined}
                       selectedSlot={selectedSlot}
                       onSelectSlot={setSelectedSlot}
-                      professionals={professionals}
                     />
                   </div>
                 )}
               </div>
 
-              {selectedSlot && (() => {
-                const prof = professionals.find(p =>
-                  String(p.clinicorp_id) === selectedSlot.professionalId ||
-                  p.id === selectedSlot.professionalId
-                )
-                return (
-                  <div className="slot-summary">
-                    ✓ {selectedDate} às {selectedSlot.from}
-                    {prof ? ` · ${prof.name.split(' ')[0]}` : ''}
-                  </div>
-                )
-              })()}
+              {selectedSlot && (
+                <div className="slot-summary">
+                  ✓ {selectedDate} às {selectedSlot.from}
+                  {selectedSlot.professionalName ? ` · ${selectedSlot.professionalName.split(' ')[0]}` : ''}
+                </div>
+              )}
 
               {panelTags.length > 0 && (
                 <div className="tags-section">

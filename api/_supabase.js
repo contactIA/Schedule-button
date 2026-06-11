@@ -26,24 +26,17 @@ export async function getClinicByAccountId(idconta) {
   const clinic = data?.[0] ?? null
   if (!clinic) return null
 
-  // Busca profissionais e unidades em paralelo
-  const [{ data: professionals }, { data: units, error: unitsError }] = await Promise.all([
-    sb.from('professionals')
-      .select('clinicorp_id, name')
-      .eq('clinic_id', clinic.id)
-      .eq('active', true),
-    sb.from('units')
-      .select('*')
-      .eq('clinic_id', clinic.id)
-      .eq('active', true)
-      .order('position', { ascending: true }),
-  ])
+  const { data: units, error: unitsError } = await sb
+    .from('units')
+    .select('*')
+    .eq('clinic_id', clinic.id)
+    .eq('active', true)
+    .order('position', { ascending: true })
 
   if (unitsError) throw new Error(`Erro ao buscar unidades: ${unitsError.message}`)
 
   return {
     ...clinic,
-    professionals: professionals ?? [],
     units: units ?? [],
   }
 }

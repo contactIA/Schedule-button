@@ -382,7 +382,7 @@ function ClinicList({ clinics, flash, onEdit, onNew }) {
 // Token Clinicorp é write-only: o campo sempre inicia vazio e só é
 // enviado quando preenchido. Trocar credencial revalida businessId
 // e codeLink no servidor.
-function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
+function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) {
   const isNew = !unit
   const [expanded,     setExpanded]     = useState(isNew)
   const [name,         setName]         = useState(unit?.name ?? '')
@@ -393,6 +393,27 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState('')
   const [savedOk, setSavedOk] = useState(false)
+
+  // Profissionais agendáveis — buscados ao vivo do Clinicorp ao expandir,
+  // direto da credencial desta unidade (nome sempre correto, sem sync)
+  const [profList,    setProfList]    = useState(null)
+  const [profError,   setProfError]   = useState('')
+  const [bookableIds, setBookableIds] = useState(unit?.bookableProfessionalIds ?? [])
+
+  useEffect(() => {
+    if (!expanded || isNew || profList !== null) return
+    fetch(`/api/units?id=${unit.id}&professionals=1`, { headers: { 'x-admin-key': adminKey } })
+      .then(async r => {
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d.error || `Erro HTTP ${r.status}`)
+        return d
+      })
+      .then(d => {
+        setProfList(d.professionals ?? [])
+        setBookableIds(d.bookableProfessionalIds ?? [])
+      })
+      .catch(err => { setProfList([]); setProfError(err.message) })
+  }, [expanded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const call = async (method, body) => {
     const res = await fetch('/api/units', {
@@ -427,6 +448,10 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
       if (token.trim())                                  body.clinicorpToken = token
       if (subscriberId.trim() && subscriberId !== (unit.subscriberId ?? '')) body.subscriberId = subscriberId
       if (codeLink.trim() && String(codeLink) !== String(unit.codeLink ?? '')) body.codeLink = codeLink
+      const savedIds = unit.bookableProfessionalIds ?? []
+      if (profList !== null && JSON.stringify([...bookableIds].sort()) !== JSON.stringify([...savedIds].sort())) {
+        body.bookableProfessionalIds = bookableIds
+      }
       if (Object.keys(body).length === 1) {
         setError('Nenhuma alteração para salvar.')
         return
@@ -437,6 +462,7 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
     try {
       const data = isNew ? await call('POST', body) : await call('PUT', body)
       setToken('')
+      setBookableIds(data.unit?.bookableProfessionalIds ?? [])
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2500)
       onSaved(data.unit)
@@ -456,6 +482,19 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
     } catch (err) {
       setError(err.message)
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Excluir a unidade "${unit.name}"? Essa ação não pode ser desfeita.`)) return
+    setBusy(true)
+    setError('')
+    try {
+      await call('DELETE', { id: unit.id })
+      onDeleted?.(unit.id)
+    } catch (err) {
+      setError(err.message)
       setBusy(false)
     }
   }
@@ -517,10 +556,54 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
             </span>
           )}
 
+          {!isNew && (
+            <div className="admin-field">
+              <label>Profissionais agendáveis</label>
+              {profList === null && !profError && (
+                <span className="admin-field-hint">Carregando profissionais do Clinicorp...</span>
+              )}
+              {profError && <span className="admin-field-hint">⚠ {profError}</span>}
+              {profList !== null && !profError && profList.length === 0 && (
+                <span className="admin-field-hint">Nenhum profissional encontrado no Clinicorp desta unidade.</span>
+              )}
+              {profList?.length > 0 && (
+                <>
+                  <div className="tag-pick-grid">
+                    {profList.map(p => {
+                      const on = bookableIds.includes(p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`tag-pick${on ? ' tag-pick-active' : ''}`}
+                          onClick={() => setBookableIds(prev =>
+                            on ? prev.filter(x => x !== p.id) : [...prev, p.id])}
+                        >
+                          {on ? '✓ ' : ''}{p.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="admin-field-hint">
+                    {bookableIds.length === 0
+                      ? 'Nenhum selecionado = todos aparecem para agendamento.'
+                      : 'Somente os selecionados aparecem para agendamento. Salvo com "Salvar unidade".'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
           {error   && <div className="admin-error-box">{error}</div>}
           {savedOk && <div className="clinic-flash">✓ Unidade salva.</div>}
 
           <div className="unit-editor-actions">
+            {!isNew && (
+              <button type="button" className="admin-btn-danger" disabled={busy}
+                onClick={handleDelete}>
+                Excluir
+              </button>
+            )}
             {!isNew && (
               <button type="button" className="admin-btn-secondary" disabled={busy}
                 onClick={handleToggleActive}>
@@ -540,11 +623,12 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel }) {
 }
 
 // ── Edição de clínica ─────────────────────────────────────────────
-function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
+function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
   const [loading,   setLoading]   = useState(true)
   const [loadError, setLoadError] = useState('')
   const [saving,    setSaving]    = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [deleting,  setDeleting]  = useState(false)
 
   const [clinic,       setClinic]       = useState(null)
   const [name,         setName]         = useState('')
@@ -651,6 +735,25 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
     }
   }
 
+  const handleDeleteClinic = async () => {
+    if (!window.confirm(`Excluir a clínica "${name}" e todas as suas unidades? Essa ação não pode ser desfeita.`)) return
+    setDeleting(true)
+    setSaveError('')
+    try {
+      const res = await fetch('/api/clinics', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ id: clinicId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
+      onDeleted(name)
+    } catch (err) {
+      setSaveError(err.message)
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="admin-wrap">
@@ -750,6 +853,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
                   clinicId={clinicId}
                   unit={u}
                   onSaved={nu => setUnits(prev => prev.map(x => x.id === nu.id ? nu : x))}
+                  onDeleted={id => setUnits(prev => prev.filter(x => x.id !== id))}
                 />
               ))}
               {addingUnit && (
@@ -801,6 +905,15 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
                 ? <span className="admin-btn-loading"><span className="admin-spinner" />Salvando...</span>
                 : 'Salvar alterações'}
             </button>
+          </div>
+
+          <div className="admin-danger-zone">
+            <button type="button" className="admin-btn-danger" disabled={deleting} onClick={handleDeleteClinic}>
+              {deleting ? 'Excluindo...' : 'Excluir clínica'}
+            </button>
+            <span className="admin-field-hint">
+              Remove a clínica e todas as unidades. Não pode ser desfeito.
+            </span>
           </div>
         </form>
       </div>
@@ -1350,6 +1463,7 @@ export default function Setup() {
           clinicId={editingId}
           onCancel={() => setView('list')}
           onSaved={(name) => { setFlash(`${name} atualizada com sucesso.`); refreshClinics(); setView('list') }}
+          onDeleted={(name) => { setFlash(`${name} excluída.`); refreshClinics(); setView('list') }}
         />
       )}
 
