@@ -279,6 +279,7 @@ body {
   color: #fff; font-weight: 600;
 }
 .dentist-chip-active:hover { color: #fff; }
+.reminder-pick { display: flex; flex-wrap: wrap; gap: 6px; }
 .slots-loading-row {
   display: flex; align-items: center; justify-content: center;
   gap: 10px; font-size: 13px; color: #64748b; padding: 20px 16px;

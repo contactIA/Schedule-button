@@ -55,7 +55,10 @@ export default async function handler(req, res) {
     scheduledMessage = null, // config do lembrete de agendamento (opcional)
   } = req.body ?? {}
 
-  if (scheduledMessage?.enabled && (!scheduledMessage.channelFrom || !scheduledMessage.templateId)) {
+  const reminderMsgs = scheduledMessage?.enabled
+    ? (Array.isArray(scheduledMessage.messages) ? scheduledMessage.messages : [scheduledMessage])
+    : []
+  if (scheduledMessage?.enabled && (reminderMsgs.length === 0 || reminderMsgs.some(m => !m.channelFrom || !m.templateId))) {
     return res.status(400).json({ error: 'Lembrete ativado exige canal e modelo de mensagem.' })
   }
 

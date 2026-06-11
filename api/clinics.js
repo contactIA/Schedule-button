@@ -80,8 +80,12 @@ export default async function handler(req, res) {
     const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage, active } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
-    if (scheduledMessage?.enabled && (!scheduledMessage.channelFrom || !scheduledMessage.templateId)) {
-      return res.status(400).json({ error: 'Lembrete ativado exige canal e modelo de mensagem.' })
+    if (scheduledMessage?.enabled) {
+      // Shape novo: lista em .messages; shape antigo: mensagem única solta
+      const msgs = Array.isArray(scheduledMessage.messages) ? scheduledMessage.messages : [scheduledMessage]
+      if (msgs.length === 0 || msgs.some(m => !m.channelFrom || !m.templateId)) {
+        return res.status(400).json({ error: 'Lembrete ativado exige canal e modelo em todas as mensagens.' })
+      }
     }
 
     try {

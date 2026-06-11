@@ -1,5 +1,25 @@
 import { getClinicByAccountId } from './_supabase.js'
 
+// Converte o scheduled_message do banco para o runtime: shape antigo
+// (mensagem única) vira lista; mensagens ocultas (active: false) saem.
+function normalizeScheduledMessage(sm) {
+  if (!sm?.enabled) return null
+  const raw = Array.isArray(sm.messages)
+    ? sm.messages
+    : [{ id: 'msg-legado', label: sm.templateName || 'Lembrete', ...sm }]
+  const messages = raw
+    .filter(m => m.active !== false && m.templateId)
+    .map(m => ({
+      id:          m.id,
+      label:       m.label || m.templateName || 'Lembrete',
+      channelFrom: m.channelFrom,
+      templateId:  m.templateId,
+      paramMap:    m.paramMap ?? {},
+      timing:      m.timing ?? null,
+    }))
+  return messages.length > 0 ? { enabled: true, messages } : null
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -56,8 +76,9 @@ export default async function handler(req, res) {
       agendadoStepId: panels[0]?.agendadoStepId,
       steps:          clinicSteps,
       tags:           clinic.helena_tags  ?? [],
-      // Config do lembrete — só vai ao runtime quando ativado
-      scheduledMessage: clinic.scheduled_message?.enabled ? clinic.scheduled_message : null,
+      // Config do lembrete — só vai ao runtime quando ativado, sempre no
+      // shape de lista e só com as mensagens visíveis para o operador
+      scheduledMessage: normalizeScheduledMessage(clinic.scheduled_message),
       panels,
       units,
     })

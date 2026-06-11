@@ -66,31 +66,198 @@ function guessReminderVar(paramName) {
   return 'patient_name'
 }
 
-function ReminderConfig({ channels, value, onChange, loadTemplates }) {
-  const cfg = value ?? { enabled: false }
-  const set = (patch) => onChange({ ...cfg, ...patch })
-  const mode = cfg.timing?.mode ?? 'day_before'
+// Shape atual: { enabled, messages: [{ id, label, active, canal, modelo... }] }.
+// Clínicas antigas têm uma mensagem única solta no objeto — vira lista de 1.
+function normalizeReminder(value) {
+  if (!value) return null
+  if (Array.isArray(value.messages)) return value
+  const { enabled, ...msg } = value
+  return {
+    enabled: !!enabled,
+    messages: (msg.templateId || msg.channelId)
+      ? [{ id: 'msg-legado', label: msg.templateName || 'Lembrete', active: true, ...msg }]
+      : [],
+  }
+}
 
-  // Modelos do canal escolhido — filtrados pela própria Helena (ChannelId),
-  // recarregados a cada troca de canal. tplData guarda de qual canal é o
-  // resultado; canal diferente do cfg = ainda carregando.
+// true = lembrete ativado com mensagem faltando canal/modelo (bloqueia salvar)
+function reminderInvalid(value) {
+  const cfg = normalizeReminder(value)
+  if (!cfg?.enabled) return false
+  const msgs = cfg.messages ?? []
+  return msgs.length === 0 || msgs.some(m => !m.channelId || !m.templateId)
+}
+
+function newReminderMessage() {
+  return {
+    id: (crypto.randomUUID?.() ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    label: '', active: true,
+    channelId: '', channelFrom: '', channelName: '',
+    templateId: '', templateName: '', paramMap: {},
+    timing: { mode: 'day_before', time: '18:00' },
+  }
+}
+
+function ReminderMessageEditor({ channels, msg, onChange, onRemove, loadTemplates }) {
+  const set = (patch) => onChange({ ...msg, ...patch })
+  const mode = msg.timing?.mode ?? 'day_before'
+
+  // Modelos do canal desta mensagem — filtrados pela própria Helena
+  // (ChannelId). tplData guarda de qual canal é o resultado; canal
+  // diferente do msg = ainda carregando.
   const [tplData, setTplData] = useState({ channelId: null, list: [], error: '' })
 
   useEffect(() => {
-    if (!cfg.enabled || !cfg.channelId) return
+    if (!msg.channelId) return
     let alive = true
-    loadTemplates(cfg.channelId)
-      .then(list => { if (alive) setTplData({ channelId: cfg.channelId, list, error: '' }) })
-      .catch(err => { if (alive) setTplData({ channelId: cfg.channelId, list: [], error: err.message }) })
+    loadTemplates(msg.channelId)
+      .then(list => { if (alive) setTplData({ channelId: msg.channelId, list, error: '' }) })
+      .catch(err => { if (alive) setTplData({ channelId: msg.channelId, list: [], error: err.message }) })
     return () => { alive = false }
-  }, [cfg.enabled, cfg.channelId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [msg.channelId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tplReady          = tplData.channelId === cfg.channelId
+  const tplReady          = tplData.channelId === msg.channelId
   const channelTemplates  = tplReady ? tplData.list : []
   const tplError          = tplReady ? tplData.error : ''
-  const tplLoading        = !!cfg.channelId && !tplReady
+  const tplLoading        = !!msg.channelId && !tplReady
 
-  const template = channelTemplates.find(t => t.id === cfg.templateId)
+  const template = channelTemplates.find(t => t.id === msg.templateId)
+
+  return (
+    <div className={`reminder-msg-card${msg.active === false ? ' reminder-msg-card-off' : ''}`}>
+      <div className="reminder-msg-head">
+        <input
+          type="text"
+          className="reminder-msg-label"
+          value={msg.label ?? ''}
+          onChange={e => set({ label: e.target.value })}
+          placeholder="Nome da mensagem (o operador vê este nome)"
+        />
+        <button
+          type="button"
+          className={`reminder-msg-vis${msg.active !== false ? ' reminder-msg-vis-on' : ''}`}
+          title={msg.active !== false ? 'Visível para o operador' : 'Oculta do operador'}
+          onClick={() => set({ active: msg.active === false })}
+        >
+          {msg.active !== false ? 'Visível' : 'Oculta'}
+        </button>
+        <button type="button" className="unit-remove-btn" title="Remover mensagem" onClick={onRemove}>✕</button>
+      </div>
+
+      <div className="admin-field">
+        <label>Canal de envio *</label>
+        <select
+          className="step-select"
+          value={msg.channelId ?? ''}
+          onChange={e => {
+            const ch = channels.find(c => c.id === e.target.value)
+            const patch = { channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' }
+            // Trocou de canal → modelo do canal anterior não vale mais
+            if ((ch?.id ?? '') !== (msg.channelId ?? '')) {
+              patch.templateId = ''
+              patch.templateName = ''
+              patch.paramMap = {}
+            }
+            set(patch)
+          }}
+        >
+          <option value="">Selecione o canal...</option>
+          {channels.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </div>
+
+      <div className="admin-field">
+        <label>Modelo de mensagem *</label>
+        <select
+          className="step-select"
+          value={msg.templateId ?? ''}
+          disabled={!msg.channelId || tplLoading}
+          onChange={e => {
+            const t = channelTemplates.find(x => x.id === e.target.value)
+            const paramMap = {}
+            for (const p of t?.params ?? []) paramMap[p] = guessReminderVar(p)
+            set({ templateId: t?.id ?? '', templateName: t?.name ?? '', paramMap, ...(msg.label ? {} : { label: t?.name ?? '' }) })
+          }}
+        >
+          <option value="">
+            {!msg.channelId ? 'Selecione primeiro o canal'
+              : tplLoading ? 'Carregando modelos...'
+              : 'Selecione o modelo...'}
+          </option>
+          {channelTemplates.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        <span className="admin-field-hint">
+          {tplError ? `⚠ ${tplError}`
+            : !msg.channelId ? 'Escolha o canal de envio para listar os modelos dele.'
+            : tplLoading ? 'Buscando modelos do canal na Helena...'
+            : channelTemplates.length === 0 ? 'Nenhum modelo aprovado para este canal na conta Helena.'
+            : 'Modelos aprovados do canal selecionado.'}
+        </span>
+      </div>
+
+      {template?.params?.length > 0 && (
+        <div className="admin-field">
+          <label>Variáveis do modelo</label>
+          <div className="reminder-params">
+            {template.params.map(p => (
+              <div key={p} className="reminder-param-row">
+                <code>{p}</code>
+                <span className="reminder-param-arrow">→</span>
+                <select
+                  className="step-select"
+                  value={msg.paramMap?.[p] ?? 'patient_name'}
+                  onChange={e => set({ paramMap: { ...msg.paramMap, [p]: e.target.value } })}
+                >
+                  {REMINDER_VARS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="admin-field">
+        <label>Quando enviar *</label>
+        <select
+          className="step-select"
+          value={mode}
+          onChange={e => set({ timing: { ...msg.timing, mode: e.target.value } })}
+        >
+          <option value="day_before">Na véspera da consulta</option>
+          <option value="hours_before">Horas antes da consulta</option>
+          <option value="immediate">Logo após o agendamento</option>
+        </select>
+        {mode === 'day_before' && (
+          <div className="reminder-timing-row">
+            <span>às</span>
+            <input
+              type="time"
+              value={msg.timing?.time ?? '18:00'}
+              onChange={e => set({ timing: { ...msg.timing, mode, time: e.target.value } })}
+            />
+          </div>
+        )}
+        {mode === 'hours_before' && (
+          <div className="reminder-timing-row">
+            <input
+              type="number" min="1" max="72"
+              value={msg.timing?.hours ?? 24}
+              onChange={e => set({ timing: { ...msg.timing, mode, hours: Number(e.target.value) } })}
+            />
+            <span>hora(s) antes</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReminderConfig({ channels, value, onChange, loadTemplates }) {
+  const cfg = normalizeReminder(value) ?? { enabled: false, messages: [] }
+  const messages = cfg.messages ?? []
+  const set = (patch) => onChange({ ...cfg, ...patch })
 
   return (
     <div className="admin-field">
@@ -110,112 +277,24 @@ function ReminderConfig({ channels, value, onChange, loadTemplates }) {
 
       {cfg.enabled && (
         <div className="reminder-config">
-          <div className="admin-field">
-            <label>Canal de envio *</label>
-            <select
-              className="step-select"
-              value={cfg.channelId ?? ''}
-              onChange={e => {
-                const ch = channels.find(c => c.id === e.target.value)
-                const patch = { channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' }
-                // Trocou de canal → modelo do canal anterior não vale mais
-                if ((ch?.id ?? '') !== (cfg.channelId ?? '')) {
-                  patch.templateId = ''
-                  patch.templateName = ''
-                  patch.paramMap = {}
-                }
-                set(patch)
-              }}
-            >
-              <option value="">Selecione o canal...</option>
-              {channels.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
-          </div>
+          {messages.map(m => (
+            <ReminderMessageEditor
+              key={m.id}
+              channels={channels}
+              msg={m}
+              onChange={nm => set({ messages: messages.map(x => x.id === nm.id ? nm : x) })}
+              onRemove={() => set({ messages: messages.filter(x => x.id !== m.id) })}
+              loadTemplates={loadTemplates}
+            />
+          ))}
 
-          <div className="admin-field">
-            <label>Modelo de mensagem *</label>
-            <select
-              className="step-select"
-              value={cfg.templateId ?? ''}
-              disabled={!cfg.channelId || tplLoading}
-              onChange={e => {
-                const t = channelTemplates.find(x => x.id === e.target.value)
-                const paramMap = {}
-                for (const p of t?.params ?? []) paramMap[p] = guessReminderVar(p)
-                set({ templateId: t?.id ?? '', templateName: t?.name ?? '', paramMap })
-              }}
-            >
-              <option value="">
-                {!cfg.channelId ? 'Selecione primeiro o canal'
-                  : tplLoading ? 'Carregando modelos...'
-                  : 'Selecione o modelo...'}
-              </option>
-              {channelTemplates.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <span className="admin-field-hint">
-              {tplError ? `⚠ ${tplError}`
-                : !cfg.channelId ? 'Escolha o canal de envio para listar os modelos dele.'
-                : tplLoading ? 'Buscando modelos do canal na Helena...'
-                : channelTemplates.length === 0 ? 'Nenhum modelo aprovado para este canal na conta Helena.'
-                : 'Modelos aprovados do canal selecionado.'}
-            </span>
-          </div>
-
-          {template?.params?.length > 0 && (
-            <div className="admin-field">
-              <label>Variáveis do modelo</label>
-              <div className="reminder-params">
-                {template.params.map(p => (
-                  <div key={p} className="reminder-param-row">
-                    <code>{p}</code>
-                    <span className="reminder-param-arrow">→</span>
-                    <select
-                      className="step-select"
-                      value={cfg.paramMap?.[p] ?? 'patient_name'}
-                      onChange={e => set({ paramMap: { ...cfg.paramMap, [p]: e.target.value } })}
-                    >
-                      {REMINDER_VARS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="admin-field">
-            <label>Quando enviar *</label>
-            <select
-              className="step-select"
-              value={mode}
-              onChange={e => set({ timing: { ...cfg.timing, mode: e.target.value } })}
-            >
-              <option value="day_before">Na véspera da consulta</option>
-              <option value="hours_before">Horas antes da consulta</option>
-              <option value="immediate">Logo após o agendamento</option>
-            </select>
-            {mode === 'day_before' && (
-              <div className="reminder-timing-row">
-                <span>às</span>
-                <input
-                  type="time"
-                  value={cfg.timing?.time ?? '18:00'}
-                  onChange={e => set({ timing: { ...cfg.timing, mode, time: e.target.value } })}
-                />
-              </div>
-            )}
-            {mode === 'hours_before' && (
-              <div className="reminder-timing-row">
-                <input
-                  type="number" min="1" max="72"
-                  value={cfg.timing?.hours ?? 24}
-                  onChange={e => set({ timing: { ...cfg.timing, mode, hours: Number(e.target.value) } })}
-                />
-                <span>hora(s) antes</span>
-              </div>
-            )}
-          </div>
+          <button type="button" className="admin-add-unit-btn" onClick={() => set({ messages: [...messages, newReminderMessage()] })}>
+            + Adicionar mensagem
+          </button>
+          <span className="admin-field-hint">
+            Com mais de uma mensagem visível, o operador escolhe qual enviar na hora do agendamento.
+            Mensagens ocultas ficam salvas mas não aparecem para o operador.
+          </span>
         </div>
       )}
     </div>
@@ -710,7 +789,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
         setClinicActive(detail.active !== false)
         setUnits(detail.units ?? [])
         setChannels(preview.channels ?? [])
-        setReminder(detail.scheduledMessage ?? null)
+        setReminder(normalizeReminder(detail.scheduledMessage))
         const live = preview.panels ?? []
         setHelenaPanels(live)
 
@@ -745,8 +824,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (reminder?.enabled && (!reminder.channelId || !reminder.templateId)) {
-      setSaveError('Lembrete ativado: selecione o canal e o modelo de mensagem.')
+    if (reminderInvalid(reminder)) {
+      setSaveError('Lembrete ativado: adicione ao menos uma mensagem com canal e modelo selecionados.')
       return
     }
     setSaving(true)
@@ -1257,7 +1336,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                 className="admin-btn-primary"
                 disabled={
                   !helenaToken || pickedPanels.length === 0 || pickedPanels.some(p => !p.agendadoStepId)
-                  || (reminder?.enabled && (!reminder.channelId || !reminder.templateId))
+                  || reminderInvalid(reminder)
                 }
               >
                 Próximo →

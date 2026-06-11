@@ -129,6 +129,8 @@ function App() {
   const [availability,   setAvailability]   = useState(null)
   // Filtro por dentista nos horários do dia (null = qualquer)
   const [selectedDentistId, setSelectedDentistId] = useState(null)
+  // Mensagem de lembrete escolhida pelo operador (null = primeira da lista)
+  const [selectedReminderId, setSelectedReminderId] = useState(null)
 
   // Histórico do paciente no Clinicorp ({found, appointments} | null)
   const [history,        setHistory]        = useState(null)
@@ -405,17 +407,19 @@ function App() {
 
       // Lembrete agendado — só após Clinicorp confirmado; falha nunca desfaz nada
       let reminderStatus = null
-      const reminderCfg = clinicConfig?.scheduledMessage
-      if (clinicorpStatus === 'ok' && reminderCfg?.enabled) {
+      const reminderCfg  = clinicConfig?.scheduledMessage
+      const reminderMsgs = reminderCfg?.messages ?? []
+      const reminderMsg  = reminderMsgs.find(m => m.id === selectedReminderId) ?? reminderMsgs[0]
+      if (clinicorpStatus === 'ok' && reminderCfg?.enabled && reminderMsg) {
         try {
-          await scheduleReminder(reminderCfg, {
+          await scheduleReminder(reminderMsg, {
             patientName: nome.trim(),
             phone:       telefone,
             dateBr:      toBrDate(selectedDate),
             time:        selectedSlot.from,
             dentist:     selectedSlot.professionalName ?? '',
             clinicName:  clinicConfig?.name ?? '',
-            scheduling:  reminderScheduling(reminderCfg.timing, selectedDate, selectedSlot.from),
+            scheduling:  reminderScheduling(reminderMsg.timing, selectedDate, selectedSlot.from),
           }, idconta)
           reminderStatus = 'ok'
         } catch (err) {
@@ -483,6 +487,10 @@ function App() {
   const visibleSlots = selectedDentistId
     ? availableSlots.filter(s => s.professionalId === selectedDentistId)
     : availableSlots
+
+  // Mensagens de lembrete visíveis — com 2+ o operador escolhe qual enviar
+  const reminderOptions = clinicConfig?.scheduledMessage?.messages ?? []
+  const activeReminderId = (reminderOptions.find(m => m.id === selectedReminderId) ?? reminderOptions[0])?.id
 
   return (
     <div className="page">
@@ -769,6 +777,25 @@ function App() {
                 <div className="slot-summary">
                   ✓ {selectedDate} às {selectedSlot.from}
                   {selectedSlot.professionalName ? ` · ${selectedSlot.professionalName.split(' ')[0]}` : ''}
+                </div>
+              )}
+
+              {/* Escolha do lembrete — só com horário marcado e 2+ mensagens */}
+              {selectedSlot && reminderOptions.length >= 2 && (
+                <div className="tags-section">
+                  <span className="form-section-label">Mensagem de lembrete para o paciente</span>
+                  <div className="reminder-pick">
+                    {reminderOptions.map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className={`dentist-chip${activeReminderId === m.id ? ' dentist-chip-active' : ''}`}
+                        onClick={() => setSelectedReminderId(m.id)}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
