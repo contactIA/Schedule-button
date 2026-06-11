@@ -237,11 +237,12 @@ function App() {
   // ── Histórico do paciente — busca com debounce pelo telefone ──
   useEffect(() => {
     const digits = telefone.replace(/\D/g, '')
-    if (digits.length < 10 || !clinicConfig) {
-      setHistory(null)
-      return
-    }
+    const valid  = digits.length >= 10 && !!clinicConfig
     const timer = setTimeout(() => {
+      if (!valid) {
+        setHistory(null)
+        return
+      }
       setHistoryLoading(true)
       fetchClinicorpHistory(digits, idconta, activeUnit?.id)
         .then(setHistory)
@@ -251,7 +252,7 @@ function App() {
           setHistory(null)
         })
         .finally(() => setHistoryLoading(false))
-    }, 700)
+    }, valid ? 700 : 0)
     return () => clearTimeout(timer)
   }, [telefone, clinicConfig, activeUnit?.id])
 

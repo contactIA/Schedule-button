@@ -174,6 +174,8 @@ export default async function handler(req, res) {
       Dentist_PersonId:   Number(dentistId),
       PatientName:        patientName,
       MobilePhone:        patientPhone ? patientPhone.replace(/\D/g, '') : '',
+      // T03:00Z = meia-noite em Brasília (UTC-3, fixo desde 2019) — formato
+      // que a própria doc do create_appointment_by_api usa nos exemplos
       date:               `${dateLocal}T03:00:00.000Z`,
       fromTime, toTime,
       Notes:              notes || 'Agendamento via Schedule Button',
