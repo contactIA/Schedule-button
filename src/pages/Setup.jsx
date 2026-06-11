@@ -1219,7 +1219,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                       <div className="admin-field">
                         <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
                         <input type="text" value={unit.codeLink}
-                          onChange={e => updateUnit(i, 'codeLink', e.target.value.replace(/\D/g,''))}
+                          onChange={e => updateUnit(i, 'codeLink', e.target.value.trim())}
                           placeholder="Ex: 75094" />
                         <span className="admin-field-hint">Se não informado, o sistema busca automaticamente.</span>
                       </div>

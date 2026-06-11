@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       try {
         const fetched = await fetchBusinessId(clinicorpUser.trim(), clinicorpToken.trim(), subId)
         businessId    = fetched.businessId
-        finalCodeLink = codeLink ? Number(codeLink) : fetched.codeLink
+        finalCodeLink = codeLink ? String(codeLink).trim() : fetched.codeLink
       } catch (err) {
         return res.status(400).json({ error: `Credenciais inválidas: ${err.message}` })
       }
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
       if (clinicorpToken?.trim()) patch.clinicorp_token = clinicorpToken.trim()
       if (subscriberId?.trim())   patch.clinicorp_subscriber_id = subscriberId.trim()
       if (codeLink !== undefined && codeLink !== null && String(codeLink).trim() !== '') {
-        patch.clinicorp_code_link = Number(codeLink)
+        patch.clinicorp_code_link = String(codeLink).trim()
       }
 
       // Credencial trocou → revalida businessId/codeLink no Clinicorp

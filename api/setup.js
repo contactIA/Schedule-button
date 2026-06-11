@@ -117,7 +117,7 @@ export default async function handler(req, res) {
 
       // Se não tem businessId, busca automaticamente
       let businessId = u.businessId ? Number(u.businessId) : null
-      let codeLink   = u.codeLink   ? Number(u.codeLink)   : 0
+      let codeLink   = u.codeLink   ? String(u.codeLink).trim() : null
 
       if (!businessId) {
         try {
