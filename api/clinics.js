@@ -1,6 +1,5 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
-import { fetchProfessionals } from './_clinicorp.js'
 
 // Rotas admin de gestão de clínicas. Tokens nunca saem deste handler —
 // o detalhe expõe apenas hasToken e o PUT aceita token novo (write-only).
@@ -20,16 +19,10 @@ export default async function handler(req, res) {
         const clinic = data?.[0]
         if (!clinic) return res.status(404).json({ error: 'Clínica não encontrada.' })
 
-        const [{ data: units }, { data: professionals }] = await Promise.all([
-          db.from('units')
-            .select('id, name, active, position, clinicorp_user, clinicorp_subscriber_id, clinicorp_business_id, clinicorp_code_link')
-            .eq('clinic_id', id)
-            .order('position', { ascending: true }),
-          db.from('professionals')
-            .select('id, clinicorp_id, name, is_evaluator, active')
-            .eq('clinic_id', id)
-            .order('name', { ascending: true }),
-        ])
+        const { data: units } = await db.from('units')
+          .select('id, name, active, position, clinicorp_user, clinicorp_subscriber_id, clinicorp_business_id, clinicorp_code_link')
+          .eq('clinic_id', id)
+          .order('position', { ascending: true })
 
         return res.status(200).json({
           id:              clinic.id,
@@ -52,7 +45,6 @@ export default async function handler(req, res) {
             businessId:    u.clinicorp_business_id,
             codeLink:      u.clinicorp_code_link,
           })),
-          professionals: (professionals ?? []).filter(p => p.active !== false),
         })
       }
 
@@ -83,69 +75,9 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── POST → ações sobre uma clínica ──────────────────────────────
-  if (req.method === 'POST') {
-    const { id, action } = req.body ?? {}
-    if (!id || action !== 'sync_professionals') {
-      return res.status(400).json({ error: 'Ação inválida. Use { id, action: "sync_professionals" }.' })
-    }
-
-    try {
-      const { data: unit } = await db
-        .from('units')
-        .select('clinicorp_user, clinicorp_token, clinicorp_subscriber_id')
-        .eq('clinic_id', id).eq('active', true)
-        .order('position', { ascending: true })
-        .limit(1).maybeSingle()
-      if (!unit) return res.status(404).json({ error: 'Clínica sem unidade ativa para sincronizar.' })
-
-      const fetched = await fetchProfessionals(unit.clinicorp_user, unit.clinicorp_token, unit.clinicorp_subscriber_id)
-      if (fetched.length === 0) return res.status(400).json({ error: 'Nenhum profissional retornado pelo Clinicorp.' })
-
-      const { data: existing } = await db
-        .from('professionals').select('id, clinicorp_id, active').eq('clinic_id', id)
-      const known = new Set((existing ?? []).map(p => p.clinicorp_id))
-      const fresh = fetched.filter(p => !known.has(p.clinicorp_id))
-
-      if (fresh.length > 0) {
-        const { error } = await db
-          .from('professionals')
-          .insert(fresh.map(p => ({ ...p, clinic_id: id })))
-        if (error) throw new Error(error.message)
-      }
-
-      // Sync bidirecional: desativa quem saiu do agendamento online e
-      // reativa quem voltou — mantém a lista fiel ao Clinicorp
-      const fetchedIds = new Set(fetched.map(p => p.clinicorp_id))
-      const toDeactivate = (existing ?? []).filter(p => !fetchedIds.has(p.clinicorp_id) && p.active !== false).map(p => p.id)
-      const toReactivate = (existing ?? []).filter(p => fetchedIds.has(p.clinicorp_id) && p.active === false).map(p => p.id)
-      if (toDeactivate.length > 0) {
-        await db.from('professionals').update({ active: false, is_evaluator: false }).in('id', toDeactivate)
-      }
-      if (toReactivate.length > 0) {
-        await db.from('professionals').update({ active: true }).in('id', toReactivate)
-      }
-
-      const { data: professionals } = await db
-        .from('professionals')
-        .select('id, clinicorp_id, name, is_evaluator, active')
-        .eq('clinic_id', id)
-        .order('name', { ascending: true })
-
-      return res.status(200).json({
-        success: true,
-        added: fresh.length,
-        professionals: (professionals ?? []).filter(p => p.active !== false),
-      })
-    } catch (err) {
-      console.error('[clinics] POST:', err.message)
-      return res.status(500).json({ error: err.message })
-    }
-  }
-
   // ── PUT → atualiza somente os campos enviados ───────────────────
   if (req.method === 'PUT') {
-    const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage, active, evaluatorIds } = req.body ?? {}
+    const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage, active } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
     if (scheduledMessage?.enabled && (!scheduledMessage.channelFrom || !scheduledMessage.templateId)) {
@@ -179,28 +111,12 @@ export default async function handler(req, res) {
 
       if (typeof active === 'boolean') patch.active = active
 
-      if (Object.keys(patch).length === 0 && !Array.isArray(evaluatorIds)) {
+      if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: 'Nenhum campo para atualizar.' })
       }
 
-      if (Object.keys(patch).length > 0) {
-        const { error } = await db.from('clinics').update(patch).eq('id', id)
-        if (error) throw new Error(error.message)
-      }
-
-      // Marca avaliadores: true para os ids enviados, false para o restante
-      if (Array.isArray(evaluatorIds)) {
-        const { error: offError } = await db
-          .from('professionals').update({ is_evaluator: false })
-          .eq('clinic_id', id)
-        if (offError) throw new Error(offError.message)
-        if (evaluatorIds.length > 0) {
-          const { error: onError } = await db
-            .from('professionals').update({ is_evaluator: true })
-            .eq('clinic_id', id).in('id', evaluatorIds)
-          if (onError) throw new Error(onError.message)
-        }
-      }
+      const { error } = await db.from('clinics').update(patch).eq('id', id)
+      if (error) throw new Error(error.message)
 
       return res.status(200).json({ success: true })
     } catch (err) {

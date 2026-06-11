@@ -558,9 +558,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
   const [clinicActive,  setClinicActive]  = useState(true)
   const [units,         setUnits]         = useState([])
   const [addingUnit,    setAddingUnit]    = useState(false)
-  const [professionals, setProfessionals] = useState([])
-  const [syncing,       setSyncing]       = useState(false)
-  const [syncMsg,       setSyncMsg]       = useState('')
 
   useEffect(() => {
     const headers = { 'x-admin-key': adminKey }
@@ -580,7 +577,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
         setSlug(detail.slug ?? '')
         setClinicActive(detail.active !== false)
         setUnits(detail.units ?? [])
-        setProfessionals(detail.professionals ?? [])
         setChannels(preview.channels ?? [])
         setTemplates(preview.templates ?? [])
         setReminder(detail.scheduledMessage ?? null)
@@ -633,7 +629,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
           name,
           slug,
           active:      clinicActive,
-          evaluatorIds: professionals.filter(p => p.is_evaluator).map(p => p.id),
           helenaToken: newToken.trim() || undefined,
           // undefined → não mexe na config salva (tolera banco sem a coluna)
           scheduledMessage: reminder ?? undefined,
@@ -653,32 +648,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
       setSaveError(err.message)
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleSyncProfessionals = async () => {
-    setSyncing(true)
-    setSyncMsg('')
-    try {
-      const res = await fetch('/api/clinics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ id: clinicId, action: 'sync_professionals' }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`)
-      // Preserva toggles de avaliador ainda não salvos
-      setProfessionals(prev => (data.professionals ?? []).map(p => {
-        const local = prev.find(x => x.id === p.id)
-        return local ? { ...p, is_evaluator: local.is_evaluator } : p
-      }))
-      setSyncMsg(data.added > 0
-        ? `${data.added} profissional(is) novo(s) importado(s).`
-        : 'Nenhum profissional novo no Clinicorp.')
-    } catch (err) {
-      setSyncMsg(`⚠ ${err.message}`)
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -800,43 +769,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel }) {
             )}
             <span className="admin-field-hint">
               Cada unidade salva na hora, independente do botão "Salvar alterações".
-            </span>
-          </div>
-
-          <div className="admin-field">
-            <label>Profissionais — avaliadores</label>
-            {professionals.length === 0 && (
-              <span className="admin-field-hint">Nenhum profissional importado ainda. Use o botão abaixo.</span>
-            )}
-            {professionals.length > 0 && (
-              <div className="tag-pick-grid">
-                {professionals.map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`tag-pick${p.is_evaluator ? ' tag-pick-active prof-pick-active' : ''}`}
-                    onClick={() => setProfessionals(prev =>
-                      prev.map(x => x.id === p.id ? { ...x, is_evaluator: !x.is_evaluator } : x))}
-                  >
-                    {p.is_evaluator ? '✓ ' : ''}{p.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              className="admin-btn-secondary"
-              style={{ width: '100%', marginTop: 8 }}
-              disabled={syncing}
-              onClick={handleSyncProfessionals}
-            >
-              {syncing
-                ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Sincronizando...</span>
-                : '↻ Sincronizar profissionais do Clinicorp'}
-            </button>
-            {syncMsg && <span className="admin-field-hint">{syncMsg}</span>}
-            <span className="admin-field-hint">
-              Marque quem faz avaliação. Salvo junto com "Salvar alterações".
             </span>
           </div>
 

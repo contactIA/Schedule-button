@@ -29,7 +29,7 @@ export async function getClinicByAccountId(idconta) {
   // Busca profissionais e unidades em paralelo
   const [{ data: professionals }, { data: units, error: unitsError }] = await Promise.all([
     sb.from('professionals')
-      .select('clinicorp_id, name, is_evaluator')
+      .select('clinicorp_id, name')
       .eq('clinic_id', clinic.id)
       .eq('active', true),
     sb.from('units')

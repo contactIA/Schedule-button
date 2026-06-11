@@ -127,8 +127,6 @@ function App() {
   const [selectedSlot,   setSelectedSlot]   = useState(null)
   // Dias com agenda aberta no Clinicorp (null = sem dado → tudo clicável)
   const [availability,   setAvailability]   = useState(null)
-  // Filtro por dentista nos horários do dia (null = qualquer)
-  const [selectedDentistId, setSelectedDentistId] = useState(null)
 
   // Histórico do paciente no Clinicorp ({found, appointments} | null)
   const [history,        setHistory]        = useState(null)
@@ -481,15 +479,6 @@ function App() {
 
   const professionals = clinicConfig?.professionals ?? []
 
-  // Dentistas presentes nos horários do dia — alimenta o filtro
-  const slotDentists = [...new Set(availableSlots.map(s => s.professionalId))].map(pid => {
-    const prof = professionals.find(p => String(p.clinicorp_id) === pid || p.id === pid)
-    return { id: pid, name: prof?.name?.split(' ')[0] ?? 'Profissional' }
-  })
-  const visibleSlots = selectedDentistId
-    ? availableSlots.filter(s => s.professionalId === selectedDentistId)
-    : availableSlots
-
   return (
     <div className="page">
       {(dataLoading || stepsLoading) && (
@@ -571,7 +560,6 @@ function App() {
                             setSelectedSlot(null)
                             setAvailableSlots([])
                             setAvailability(null)
-                            setSelectedDentistId(null)
                           }}
                         >
                           {unit.name}
@@ -731,39 +719,10 @@ function App() {
                   <div className="slots-section">
                     <div className="slots-header">Horários disponíveis</div>
 
-                    {/* Filtro por dentista — só com 2+ profissionais no dia */}
-                    {!slotsLoading && slotDentists.length >= 2 && (
-                      <div className="dentist-filter">
-                        <button
-                          type="button"
-                          className={`dentist-chip${!selectedDentistId ? ' dentist-chip-active' : ''}`}
-                          onClick={() => { setSelectedDentistId(null); setSelectedSlot(null) }}
-                        >
-                          Qualquer disponível
-                        </button>
-                        {slotDentists.map(d => (
-                          <button
-                            key={d.id}
-                            type="button"
-                            className={`dentist-chip${selectedDentistId === d.id ? ' dentist-chip-active' : ''}`}
-                            onClick={() => {
-                              setSelectedDentistId(prev => prev === d.id ? null : d.id)
-                              setSelectedSlot(null)
-                            }}
-                          >
-                            {d.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
                     <SlotPicker
                       loading={slotsLoading}
                       error={slotsError}
-                      slots={visibleSlots}
-                      emptyMessage={selectedDentistId && availableSlots.length > 0
-                        ? 'Nenhum horário deste dentista nesta data.'
-                        : undefined}
+                      slots={availableSlots}
                       selectedSlot={selectedSlot}
                       onSelectSlot={setSelectedSlot}
                       professionals={professionals}

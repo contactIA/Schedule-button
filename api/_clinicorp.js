@@ -27,11 +27,11 @@ export async function fetchBusinessId(user, token, subscriberId) {
   }
 }
 
-// Busca profissionais de uma unidade — só os habilitados no agendamento
-// online (mesma agenda usada pelo botão) e deduplicados por id
+// Busca profissionais de uma unidade (nomes exibidos junto aos horários),
+// deduplicados por id
 export async function fetchProfessionals(user, token, subscriberId) {
   const auth = clinicorpAuth(user, token)
-  const { body } = await clinicorpGet(`/professional/list_all_professionals?subscriber_id=${subscriberId}&fromOnlineScheduling=true`, auth)
+  const { body } = await clinicorpGet(`/professional/list_all_professionals?subscriber_id=${subscriberId}`, auth)
   const seen = new Set()
   return (Array.isArray(body) ? body : [])
     .map(p => ({
