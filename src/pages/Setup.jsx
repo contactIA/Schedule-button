@@ -66,17 +66,31 @@ function guessReminderVar(paramName) {
   return 'patient_name'
 }
 
-function ReminderConfig({ channels, templates, value, onChange }) {
+function ReminderConfig({ channels, value, onChange, loadTemplates }) {
   const cfg = value ?? { enabled: false }
   const set = (patch) => onChange({ ...cfg, ...patch })
-  const template = templates.find(t => t.id === cfg.templateId)
   const mode = cfg.timing?.mode ?? 'day_before'
 
-  // Modelos filtrados pelo canal escolhido (modelo sem canal vale para todos);
-  // o modelo já salvo permanece visível mesmo se for de outro canal
-  const channelTemplates = templates.filter(t =>
-    !t.channelId || t.channelId === cfg.channelId || t.id === cfg.templateId
-  )
+  // Modelos do canal escolhido — filtrados pela própria Helena (ChannelId),
+  // recarregados a cada troca de canal. tplData guarda de qual canal é o
+  // resultado; canal diferente do cfg = ainda carregando.
+  const [tplData, setTplData] = useState({ channelId: null, list: [], error: '' })
+
+  useEffect(() => {
+    if (!cfg.enabled || !cfg.channelId) return
+    let alive = true
+    loadTemplates(cfg.channelId)
+      .then(list => { if (alive) setTplData({ channelId: cfg.channelId, list, error: '' }) })
+      .catch(err => { if (alive) setTplData({ channelId: cfg.channelId, list: [], error: err.message }) })
+    return () => { alive = false }
+  }, [cfg.enabled, cfg.channelId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tplReady          = tplData.channelId === cfg.channelId
+  const channelTemplates  = tplReady ? tplData.list : []
+  const tplError          = tplReady ? tplData.error : ''
+  const tplLoading        = !!cfg.channelId && !tplReady
+
+  const template = channelTemplates.find(t => t.id === cfg.templateId)
 
   return (
     <div className="admin-field">
@@ -104,9 +118,8 @@ function ReminderConfig({ channels, templates, value, onChange }) {
               onChange={e => {
                 const ch = channels.find(c => c.id === e.target.value)
                 const patch = { channelId: ch?.id ?? '', channelFrom: ch?.number ?? '', channelName: ch?.label ?? '' }
-                // Modelo do canal anterior não vale para o novo → limpa a seleção
-                const t = templates.find(x => x.id === cfg.templateId)
-                if (t?.channelId && t.channelId !== ch?.id) {
+                // Trocou de canal → modelo do canal anterior não vale mais
+                if ((ch?.id ?? '') !== (cfg.channelId ?? '')) {
                   patch.templateId = ''
                   patch.templateName = ''
                   patch.paramMap = {}
@@ -124,25 +137,29 @@ function ReminderConfig({ channels, templates, value, onChange }) {
             <select
               className="step-select"
               value={cfg.templateId ?? ''}
-              disabled={!cfg.channelId}
+              disabled={!cfg.channelId || tplLoading}
               onChange={e => {
-                const t = templates.find(x => x.id === e.target.value)
+                const t = channelTemplates.find(x => x.id === e.target.value)
                 const paramMap = {}
                 for (const p of t?.params ?? []) paramMap[p] = guessReminderVar(p)
                 set({ templateId: t?.id ?? '', templateName: t?.name ?? '', paramMap })
               }}
             >
-              <option value="">{cfg.channelId ? 'Selecione o modelo...' : 'Selecione primeiro o canal'}</option>
+              <option value="">
+                {!cfg.channelId ? 'Selecione primeiro o canal'
+                  : tplLoading ? 'Carregando modelos...'
+                  : 'Selecione o modelo...'}
+              </option>
               {channelTemplates.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
             <span className="admin-field-hint">
-              {!cfg.channelId
-                ? 'Escolha o canal de envio para listar os modelos dele.'
-                : channelTemplates.length === 0
-                  ? 'Nenhum modelo aprovado para este canal na conta Helena.'
-                  : 'Modelos aprovados do canal selecionado.'}
+              {tplError ? `⚠ ${tplError}`
+                : !cfg.channelId ? 'Escolha o canal de envio para listar os modelos dele.'
+                : tplLoading ? 'Buscando modelos do canal na Helena...'
+                : channelTemplates.length === 0 ? 'Nenhum modelo aprovado para este canal na conta Helena.'
+                : 'Modelos aprovados do canal selecionado.'}
             </span>
           </div>
 
@@ -658,11 +675,21 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
   const [helenaPanels, setHelenaPanels] = useState([])
   const [pickedPanels, setPickedPanels] = useState([])
   const [channels,     setChannels]     = useState([])
-  const [templates,    setTemplates]    = useState([])
   const [reminder,     setReminder]     = useState(null)
   const [clinicActive,  setClinicActive]  = useState(true)
   const [units,         setUnits]         = useState([])
   const [addingUnit,    setAddingUnit]    = useState(false)
+
+  // Modelos do lembrete são buscados por canal, filtrados pela Helena
+  const loadReminderTemplates = async (channelId) => {
+    const res = await fetch(
+      `/api/helena-preview?clinicId=${clinicId}&templates=1&channelId=${encodeURIComponent(channelId)}&_t=${Date.now()}`,
+      { headers: { 'x-admin-key': adminKey } }
+    )
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || `Erro HTTP ${res.status}`)
+    return d.templates ?? []
+  }
 
   useEffect(() => {
     const headers = { 'x-admin-key': adminKey }
@@ -683,7 +710,6 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
         setClinicActive(detail.active !== false)
         setUnits(detail.units ?? [])
         setChannels(preview.channels ?? [])
-        setTemplates(preview.templates ?? [])
         setReminder(detail.scheduledMessage ?? null)
         const live = preview.panels ?? []
         setHelenaPanels(live)
@@ -844,9 +870,9 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
 
           <ReminderConfig
             channels={channels}
-            templates={templates}
             value={reminder}
             onChange={setReminder}
+            loadTemplates={loadReminderTemplates}
           />
 
           <div className="admin-field">
@@ -959,8 +985,18 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
   const [stepsLoading,  setStepsLoading]  = useState(false)
   const [stepsError,    setStepsError]    = useState('')
   const [channels,      setChannels]      = useState([])
-  const [templates,     setTemplates]     = useState([])
   const [reminder,      setReminder]      = useState(null)
+
+  // Modelos do lembrete são buscados por canal, filtrados pela Helena
+  const loadReminderTemplates = async (channelId) => {
+    const res = await fetch(
+      `/api/helena-preview?token=${encodeURIComponent(helenaToken.trim())}&templates=1&channelId=${encodeURIComponent(channelId)}&_t=${Date.now()}`,
+      { headers: { 'x-admin-key': adminKey } }
+    )
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || `Erro HTTP ${res.status}`)
+    return d.templates ?? []
+  }
 
   // Unidades Clinicorp (multi-unidade)
   const [units, setUnits] = useState([{
@@ -1008,7 +1044,6 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
       if (!res.ok) throw new Error(data.error || 'Erro ao verificar token')
       setHelenaPanels(data.panels ?? [])
       setChannels(data.channels ?? [])
-      setTemplates(data.templates ?? [])
     } catch (err) {
       setStepsError(err.message)
     } finally {
@@ -1209,9 +1244,9 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
             {helenaPanels.length > 0 && (
               <ReminderConfig
                 channels={channels}
-                templates={templates}
                 value={reminder}
                 onChange={setReminder}
+                loadTemplates={loadReminderTemplates}
               />
             )}
 

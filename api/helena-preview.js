@@ -31,13 +31,41 @@ export default async function handler(req, res) {
   }
   if (!token) return res.status(400).json({ error: 'Parâmetro token ou clinicId obrigatório' })
 
+  // ── Modo leve ?templates=1&channelId= → só modelos do canal ──────
+  // O filtro é feito pela própria Helena via ChannelId — a listagem
+  // completa não devolve o canal de cada modelo, então filtrar no
+  // cliente não funciona.
+  if (req.query?.templates) {
+    const channelId = req.query?.channelId
+    if (!channelId) return res.status(400).json({ error: 'Parâmetro channelId obrigatório' })
+    try {
+      const { ok, body } = await helenaGet(
+        `/chat/v1/template?ApprovedOnly=true&PageSize=100&IncludeDetails=Params&ChannelId=${encodeURIComponent(channelId)}`,
+        token
+      )
+      if (!ok) {
+        return res.status(400).json({ error: `Erro ao listar modelos do canal. (${JSON.stringify(body).slice(0, 200)})` })
+      }
+      return res.status(200).json({
+        templates: (body.items ?? []).map(t => ({
+          id:     t.id,
+          name:   t.name,
+          type:   t.type,
+          params: (t.params ?? []).map(p => p.name),
+        })),
+      })
+    } catch (err) {
+      console.error('[helena-preview] templates:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
   try {
-    // Painéis (com etapas + etiquetas), canais e modelos em paralelo.
-    // Canais/modelos alimentam a config do lembrete — falha neles não bloqueia.
-    const [panelsRes, channelsRes, templatesRes] = await Promise.all([
+    // Painéis (com etapas + etiquetas) e canais em paralelo — ambos da
+    // config do lembrete; modelos são buscados por canal no modo leve.
+    const [panelsRes, channelsRes] = await Promise.all([
       helenaGet('/crm/v2/panel?IncludeDetails=Steps&IncludeDetails=Tags&PageSize=100', token),
       helenaGet('/chat/v1/channel?ChannelType=All', token),
-      helenaGet('/chat/v1/template?ApprovedOnly=true&PageSize=100&IncludeDetails=Params', token),
     ])
 
     const { ok, body } = panelsRes
@@ -52,16 +80,6 @@ export default async function handler(req, res) {
           id:     c.id,
           number: c.number,
           label:  `${c.numberFormatted || c.number}${c.identity?.platform ? ` · ${c.identity.platform}` : ''}`,
-        }))
-      : []
-
-    const templates = templatesRes.ok
-      ? (templatesRes.body.items ?? []).map(t => ({
-          id:        t.id,
-          name:      t.name,
-          type:      t.type,
-          channelId: t.channelId,
-          params:    (t.params ?? []).map(p => p.name),
         }))
       : []
 
@@ -84,7 +102,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Nenhum painel encontrado nesta conta Helena.' })
     }
 
-    return res.status(200).json({ panels, channels, templates, totalPanels: body.totalItems ?? panels.length })
+    return res.status(200).json({ panels, channels, totalPanels: body.totalItems ?? panels.length })
 
   } catch (err) {
     console.error('[helena-preview]', err.message)
