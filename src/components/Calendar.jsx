@@ -12,7 +12,10 @@ function buildCalendarDays(year, month) {
   return days
 }
 
-export default function Calendar({ viewYear, viewMonth, selectedDate, todayStr, onDayClick, onPrevMonth, onNextMonth }) {
+// availability: { dates: Set<'YYYY-MM-DD'>, min, max } | null.
+// Dias dentro da janela [min, max] e fora do Set não têm agenda → desabilitados.
+// Fora da janela não há dado do Clinicorp, então permanecem clicáveis.
+export default function Calendar({ viewYear, viewMonth, selectedDate, todayStr, availability, onDayClick, onPrevMonth, onNextMonth }) {
   const calendarDays = buildCalendarDays(viewYear, viewMonth)
 
   return (
@@ -34,16 +37,21 @@ export default function Calendar({ viewYear, viewMonth, selectedDate, todayStr, 
           if (!day) return <div key={`e-${i}`} className="cal-empty" />
           const dateStr = toDateStr(viewYear, viewMonth, day)
           const isPast = dateStr < todayStr
+          const noAgenda = !isPast && availability
+            && dateStr >= availability.min && dateStr <= availability.max
+            && !availability.dates.has(dateStr)
           const isToday = dateStr === todayStr
           const isSelected = dateStr === selectedDate
           return (
             <button
               key={day}
               type="button"
-              disabled={isPast}
+              disabled={isPast || noAgenda}
+              title={noAgenda ? 'Sem horários disponíveis' : undefined}
               className={[
                 'cal-day',
                 isPast ? 'cal-day-past' : '',
+                noAgenda ? 'cal-day-unavailable' : '',
                 isToday && !isSelected ? 'cal-day-today' : '',
                 isSelected ? 'cal-day-selected' : '',
               ].filter(Boolean).join(' ')}

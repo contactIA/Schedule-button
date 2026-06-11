@@ -215,6 +215,7 @@ body {
 }
 .cal-day:hover:not(:disabled):not(.cal-day-selected) { background: var(--brand-light); color: var(--brand-text); }
 .cal-day-past  { color: #cbd5e1; cursor: default; }
+.cal-day-unavailable { color: #cbd5e1; cursor: not-allowed; text-decoration: line-through; }
 .cal-day-today { color: var(--brand-text); font-weight: 700; }
 .cal-day-today::after {
   content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
@@ -231,6 +232,21 @@ body {
   background: var(--brand); color: #fff; text-align: center;
   font-size: 13px; font-weight: 600; padding: 9px 16px; letter-spacing: 0.2px;
 }
+.dentist-filter {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 10px 14px; background: #fafafa; border-bottom: 1px solid #f1f5f9;
+}
+.dentist-chip {
+  border: 1px solid #e2e8f0; background: #fff; border-radius: 999px;
+  padding: 5px 12px; font-size: 12px; font-weight: 500; color: #475569;
+  cursor: pointer; font-family: inherit; transition: all 0.1s;
+}
+.dentist-chip:hover { border-color: var(--brand); color: var(--brand-text); }
+.dentist-chip-active {
+  background: var(--brand); border-color: var(--brand);
+  color: #fff; font-weight: 600;
+}
+.dentist-chip-active:hover { color: #fff; }
 .slots-loading-row {
   display: flex; align-items: center; justify-content: center;
   gap: 10px; font-size: 13px; color: #64748b; padding: 20px 16px;

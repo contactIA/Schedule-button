@@ -1,4 +1,4 @@
-export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, professionals = [] }) {
+export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, professionals = [], emptyMessage }) {
   if (loading) {
     return (
       <div className="slots-loading-row">
@@ -13,7 +13,7 @@ export default function SlotPicker({ loading, error, slots, selectedSlot, onSele
   }
 
   if (slots.length === 0) {
-    return <p className="slots-msg">Nenhum horário disponível para esta data.</p>
+    return <p className="slots-msg">{emptyMessage || 'Nenhum horário disponível para esta data.'}</p>
   }
 
   return (

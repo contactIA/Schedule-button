@@ -11,6 +11,18 @@ export async function fetchClinicorpSlots(date, idconta, unitId) {
   return res.json()
 }
 
+// Dias com agenda aberta (janela do agendamento online do Clinicorp)
+export async function fetchClinicorpDays(idconta, unitId) {
+  const params = new URLSearchParams({ days: '1', idconta })
+  if (unitId) params.set('unitId', unitId)
+  const res = await fetch(`/api/clinicorp?${params}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao buscar dias (HTTP ${res.status})`)
+  }
+  return res.json()
+}
+
 export async function scheduleClinicorp(payload, idconta, unitId) {
   const params = new URLSearchParams({ idconta })
   if (unitId) params.set('unitId', unitId)

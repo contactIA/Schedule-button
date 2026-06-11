@@ -3,7 +3,7 @@ import {
   createCard, getContact, findCardByContact,
   updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
-import { fetchClinicorpSlots, scheduleClinicorp } from './services/clinicorp'
+import { fetchClinicorpSlots, fetchClinicorpDays, scheduleClinicorp } from './services/clinicorp'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
@@ -119,6 +119,10 @@ function App() {
   const [slotsLoading,   setSlotsLoading]   = useState(false)
   const [slotsError,     setSlotsError]     = useState(null)
   const [selectedSlot,   setSelectedSlot]   = useState(null)
+  // Dias com agenda aberta no Clinicorp (null = sem dado → tudo clicável)
+  const [availability,   setAvailability]   = useState(null)
+  // Filtro por dentista nos horários do dia (null = qualquer)
+  const [selectedDentistId, setSelectedDentistId] = useState(null)
 
   // Submit
   const [loading, setLoading] = useState(false)
@@ -220,6 +224,21 @@ function App() {
       })
   }, [loadPanelData])
 
+  // ── Dias com agenda aberta — carregado ao entrar no calendário ──
+  const loadAvailability = (unitId) => {
+    fetchClinicorpDays(idconta, unitId)
+      .then(dates => {
+        if (!dates.length) { setAvailability(null); return }
+        const sorted = [...dates].sort()
+        setAvailability({ dates: new Set(dates), min: sorted[0], max: sorted[sorted.length - 1] })
+      })
+      // Sem dado de disponibilidade → calendário segue todo clicável
+      .catch(err => {
+        console.warn('[Clinicorp] Dias disponíveis indisponíveis:', err.message)
+        setAvailability(null)
+      })
+  }
+
   // ── Busca slots ao escolher um dia no calendário ──────────────
   const loadSlots = (dateStr) => {
     setSlotsLoading(true)
@@ -260,6 +279,7 @@ function App() {
     e.preventDefault()
     if (!nome.trim()) return
     if (phonePrivate && !telefone.trim()) return
+    loadAvailability(activeUnit?.id)
     setUiStep(2)
   }
 
@@ -389,6 +409,15 @@ function App() {
 
   const professionals = clinicConfig?.professionals ?? []
 
+  // Dentistas presentes nos horários do dia — alimenta o filtro
+  const slotDentists = [...new Set(availableSlots.map(s => s.professionalId))].map(pid => {
+    const prof = professionals.find(p => String(p.clinicorp_id) === pid || p.id === pid)
+    return { id: pid, name: prof?.name?.split(' ')[0] ?? 'Profissional' }
+  })
+  const visibleSlots = selectedDentistId
+    ? availableSlots.filter(s => s.professionalId === selectedDentistId)
+    : availableSlots
+
   return (
     <div className="page">
       {(dataLoading || stepsLoading) && (
@@ -465,10 +494,12 @@ function App() {
                             findCardByContact(contactId, idconta, unit.panelId ?? clinicConfig.panelId)
                               .then(card => setExistingCard(card))
                               .catch(() => setExistingCard(null))
-                            // Limpa slots da unidade anterior
+                            // Limpa slots e disponibilidade da unidade anterior
                             setSelectedDate(null)
                             setSelectedSlot(null)
                             setAvailableSlots([])
+                            setAvailability(null)
+                            setSelectedDentistId(null)
                           }}
                         >
                           {unit.name}
@@ -553,6 +584,7 @@ function App() {
                   viewMonth={viewMonth}
                   selectedDate={selectedDate}
                   todayStr={todayStr}
+                  availability={availability}
                   onDayClick={handleDayClick}
                   onPrevMonth={prevMonth}
                   onNextMonth={nextMonth}
@@ -561,10 +593,40 @@ function App() {
                 {selectedDate && (
                   <div className="slots-section">
                     <div className="slots-header">Horários disponíveis</div>
+
+                    {/* Filtro por dentista — só com 2+ profissionais no dia */}
+                    {!slotsLoading && slotDentists.length >= 2 && (
+                      <div className="dentist-filter">
+                        <button
+                          type="button"
+                          className={`dentist-chip${!selectedDentistId ? ' dentist-chip-active' : ''}`}
+                          onClick={() => { setSelectedDentistId(null); setSelectedSlot(null) }}
+                        >
+                          Qualquer disponível
+                        </button>
+                        {slotDentists.map(d => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            className={`dentist-chip${selectedDentistId === d.id ? ' dentist-chip-active' : ''}`}
+                            onClick={() => {
+                              setSelectedDentistId(prev => prev === d.id ? null : d.id)
+                              setSelectedSlot(null)
+                            }}
+                          >
+                            {d.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <SlotPicker
                       loading={slotsLoading}
                       error={slotsError}
-                      slots={availableSlots}
+                      slots={visibleSlots}
+                      emptyMessage={selectedDentistId && availableSlots.length > 0
+                        ? 'Nenhum horário deste dentista nesta data.'
+                        : undefined}
                       selectedSlot={selectedSlot}
                       onSelectSlot={setSelectedSlot}
                       professionals={professionals}

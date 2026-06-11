@@ -75,6 +75,26 @@ export default async function handler(req, res) {
   const categoryColor       = unit.clinicorp_category_color       || '#ffff00'
   const categoryDescription = unit.clinicorp_category_description || 'AVALIAÇÃO'
 
+  // ── GET ?days=1: dias com agenda aberta ──────────────────────────
+  // O Clinicorp ignora fromDate/toDate e devolve a própria janela de
+  // agendamento online (de amanhã até o limite configurado).
+  if (req.method === 'GET' && req.query?.days) {
+    try {
+      const url = `${BASE}/appointment/get_avaliable_days?subscriber_id=${subscriberId}&code_link=${codeLink}`
+      const { ok, status, body } = await clinicorpFetch(url, auth)
+      if (!ok) return res.status(status).json({
+        error: body.Message || body.message || 'Erro ao buscar dias disponíveis no Clinicorp',
+        detail: body,
+      })
+      const dates = (Array.isArray(body) ? body : [])
+        .map(d => d.Date || d.jsonDate)
+        .filter(Boolean)
+      return res.status(200).json(dates)
+    } catch (err) {
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
   // ── GET: busca horários disponíveis ──────────────────────────────
   if (req.method === 'GET') {
     const date = req.query?.date
