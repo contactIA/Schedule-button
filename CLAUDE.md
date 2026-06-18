@@ -94,6 +94,7 @@ Push na branch `main` → deploy automático na Vercel. Não há CI/CD adicional
 3. Busca de card no Helena exige `PanelId` — sem ele retorna 500 e o app criaria card duplicado
 4. Busca de contato por telefone na Helena é `GET /core/v1/contact/phonenumber/{phone}` (path, não query)
 5. Envio de mensagem na Helena exige DDI 55; a UI trabalha sem o 55
+6. `templateParams` da mensagem agendada (Helena) exige envelope `{ parameters: { "[NOME]": valor, ... }, file: null }` — objeto plano com as variáveis é silenciosamente ignorado (sai com placeholders vazios). A chave de cada variável é o nome exato do param do modelo, com colchetes e acentos (`[HORÁRIO]`)
 
 Documentação local: `Docs/clinicorp-api-docs/` e `Docs/Documentação API Helena/`.
 

@@ -126,9 +126,12 @@ export async function scheduleReminder(cfg, data, idconta) {
     dentist:      data.dentist || '',
     clinic_name:  data.clinicName || '',
   }
-  const templateParams = {}
+  // A Helena espera as variáveis aninhadas em templateParams.parameters
+  // (objeto nome-do-param → valor); um objeto plano é ignorado e o
+  // template sai com os placeholders vazios.
+  const parameters = {}
   for (const [param, varId] of Object.entries(cfg.paramMap ?? {})) {
-    templateParams[param] = values[varId] ?? ''
+    parameters[param] = values[varId] ?? ''
   }
 
   const res = await proxyFetch('/chat/v1/scheduled-message', idconta, {
@@ -139,7 +142,7 @@ export async function scheduleReminder(cfg, data, idconta) {
       to,
       type:        'TEMPLATE',
       templateId:  cfg.templateId,
-      templateParams,
+      templateParams: { parameters, file: null },
       scheduling:  data.scheduling,
     }),
   })
