@@ -131,6 +131,10 @@ function App() {
   const [selectedDentistId, setSelectedDentistId] = useState(null)
   // Mensagem de lembrete escolhida pelo operador (null = primeira da lista)
   const [selectedReminderId, setSelectedReminderId] = useState(null)
+  // Operador pode optar por não enviar o lembrete deste agendamento
+  const [sendReminder, setSendReminder] = useState(true)
+  // Nome do paciente na mensagem (null = usa o nome do contato/card)
+  const [reminderName, setReminderName] = useState(null)
 
   // Histórico do paciente no Clinicorp ({found, appointments} | null)
   const [history,        setHistory]        = useState(null)
@@ -410,22 +414,40 @@ function App() {
       const reminderCfg  = clinicConfig?.scheduledMessage
       const reminderMsgs = reminderCfg?.messages ?? []
       const reminderMsg  = reminderMsgs.find(m => m.id === selectedReminderId) ?? reminderMsgs[0]
-      if (clinicorpStatus === 'ok' && reminderCfg?.enabled && reminderMsg) {
+      if (sendReminder && clinicorpStatus === 'ok' && reminderCfg?.enabled && reminderMsg) {
+        const patientName   = (reminderName ?? nome).trim()
+        const schedulingIso = reminderScheduling(reminderMsg.timing, selectedDate, selectedSlot.from)
         try {
           await scheduleReminder(reminderMsg, {
-            patientName: nome.trim(),
+            patientName,
             phone:       telefone,
             dateBr:      toBrDate(selectedDate),
             time:        selectedSlot.from,
             dentist:     selectedSlot.professionalName ?? '',
             clinicName:  clinicConfig?.name ?? '',
-            scheduling:  reminderScheduling(reminderMsg.timing, selectedDate, selectedSlot.from),
+            scheduling:  schedulingIso,
           }, idconta)
           reminderStatus = 'ok'
         } catch (err) {
           console.warn('[Lembrete]', err.message)
           reminderStatus = err.message
         }
+        // Auditoria — fire-and-forget, nunca bloqueia nem desfaz nada
+        fetch('/api/reminder-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idconta,
+            clinicName:      clinicConfig?.name ?? '',
+            patientName,
+            phone:           telefone,
+            templateLabel:   reminderMsg.label ?? '',
+            scheduling:      schedulingIso,
+            appointmentDate: selectedDate,
+            appointmentTime: selectedSlot.from,
+            status:          reminderStatus,
+          }),
+        }).catch(() => {})
       }
 
       const baseText = card
@@ -454,6 +476,9 @@ function App() {
       setDescricao('')
       setSelectedTagIds(new Set())
       setExistingCard(null)
+      setSelectedReminderId(null)
+      setSendReminder(true)
+      setReminderName(null)
       const hadIssue = (clinicorpStatus && clinicorpStatus !== 'ok') || (reminderStatus && reminderStatus !== 'ok')
       setTimeout(() => setMessage(null), hadIssue ? 12000 : 6000)
     } catch (err) {
@@ -780,22 +805,61 @@ function App() {
                 </div>
               )}
 
-              {/* Escolha do lembrete — só com horário marcado e 2+ mensagens */}
-              {selectedSlot && reminderOptions.length >= 2 && (
-                <div className="tags-section">
-                  <span className="form-section-label">Mensagem de lembrete para o paciente</span>
-                  <div className="reminder-pick">
-                    {reminderOptions.map(m => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        className={`dentist-chip${activeReminderId === m.id ? ' dentist-chip-active' : ''}`}
-                        onClick={() => setSelectedReminderId(m.id)}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
+              {/* Lembrete por WhatsApp — só com horário marcado e lembrete configurado */}
+              {selectedSlot && reminderOptions.length >= 1 && (
+                <div className="tags-section reminder-box">
+                  <label className="reminder-send-toggle">
+                    <input
+                      type="checkbox"
+                      checked={sendReminder}
+                      onChange={e => setSendReminder(e.target.checked)}
+                    />
+                    <span className="form-section-label">Enviar lembrete por WhatsApp ao paciente</span>
+                  </label>
+
+                  {sendReminder && (
+                    <div className="reminder-send-body">
+                      {reminderOptions.length >= 2 && (
+                        <div className="reminder-field">
+                          <span className="reminder-field-label">Mensagem</span>
+                          <div className="reminder-pick">
+                            {reminderOptions.map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                className={`dentist-chip${activeReminderId === m.id ? ' dentist-chip-active' : ''}`}
+                                onClick={() => setSelectedReminderId(m.id)}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="reminder-field">
+                        <span className="reminder-field-label">Nome do paciente na mensagem</span>
+                        <input
+                          type="text"
+                          className="reminder-name-input"
+                          value={reminderName ?? nome}
+                          onChange={e => setReminderName(e.target.value)}
+                          placeholder="Nome que aparece no lembrete"
+                        />
+                        <span className="field-hint">
+                          Nem sempre o nome do contato é o do paciente — ajuste aqui se precisar.
+                        </span>
+                      </div>
+
+                      <div className="reminder-preview">
+                        <span>📅 {toBrDate(selectedDate)}</span>
+                        <span>🕐 {selectedSlot.from}</span>
+                        {selectedSlot.professionalName && (
+                          <span>🦷 {selectedSlot.professionalName.split(' ')[0]}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

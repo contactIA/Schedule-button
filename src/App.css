@@ -280,6 +280,39 @@ body {
 }
 .dentist-chip-active:hover { color: #fff; }
 .reminder-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── Lembrete (passo 2) ── */
+.reminder-box {
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 12px 14px; background: #f8fafc;
+}
+.reminder-send-toggle {
+  display: flex; align-items: center; gap: 9px; cursor: pointer;
+}
+.reminder-send-toggle input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--brand-solid); cursor: pointer;
+}
+.reminder-send-toggle .form-section-label { margin-bottom: 0; cursor: pointer; }
+.reminder-send-body {
+  display: flex; flex-direction: column; gap: 14px; margin-top: 12px;
+}
+.reminder-field { display: flex; flex-direction: column; gap: 7px; }
+.reminder-field-label {
+  font-size: 12px; font-weight: 600; color: #475569;
+}
+.reminder-name-input {
+  width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  font-size: 14px; font-family: inherit; color: #0f172a; background: #fff;
+  outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+}
+.reminder-name-input:focus {
+  border-color: var(--brand-solid);
+  box-shadow: 0 0 0 3px var(--brand-border);
+}
+.reminder-preview {
+  display: flex; flex-wrap: wrap; gap: 8px 14px;
+  font-size: 13px; color: #475569;
+}
 .slots-loading-row {
   display: flex; align-items: center; justify-content: center;
   gap: 10px; font-size: 13px; color: #64748b; padding: 20px 16px;

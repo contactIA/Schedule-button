@@ -16,7 +16,7 @@ Administradores cadastram e editam clínicas em `/setup` (senha em `ADMIN_PASSWO
 
 - **React 19 + Vite** no frontend
 - **Vercel Functions** como backend serverless (pasta `api/`)
-- **Supabase** (Postgres) como banco multi-tenant: tabelas `clinics`, `units`, `professionals`
+- **Supabase** (Postgres) como banco multi-tenant: tabelas `clinics`, `units`, `professionals`, `reminder_logs`
 - **CSS customizado** — sem Tailwind, sem MUI, sem styled-components
 - Sem TypeScript — projeto em JavaScript puro
 - Sem react-router — `src/main.jsx` roteia `/setup` vs app pela `window.location.pathname`
@@ -37,6 +37,7 @@ api/setup.js      → Cadastro de clínica (admin)
 api/clinics.js    → Lista/detalhe/edição de clínicas, sync de profissionais (admin)
 api/units.js      → Criação/edição/ativação de unidades (admin)
 api/helena-preview.js → Painéis, canais e modelos da conta Helena (admin)
+api/reminder-log.js → Grava auditoria das tentativas de lembrete (runtime, fire-and-forget)
 api/_supabase.js  → Cliente Supabase + queries compartilhadas (não vira função)
 api/_clinicorp.js → fetchBusinessId/fetchProfessionals compartilhados
 api/_auth.js      → requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
