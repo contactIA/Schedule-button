@@ -96,6 +96,7 @@ Push na branch `main` → deploy automático na Vercel. Não há CI/CD adicional
 4. Busca de contato por telefone na Helena é `GET /core/v1/contact/phonenumber/{phone}` (path, não query)
 5. Envio de mensagem na Helena exige DDI 55; a UI trabalha sem o 55
 6. `templateParams` da mensagem agendada (Helena) exige envelope `{ parameters: { "[NOME]": valor, ... }, file: null }` — objeto plano com as variáveis é silenciosamente ignorado (sai com placeholders vazios). A chave de cada variável é o nome exato do param do modelo, com colchetes e acentos (`[HORÁRIO]`)
+7. `customFields` do card (Helena, criar/atualizar) é indexado pelo **`key` (slug)** do campo, não pelo `id` — confirmado via teste. Definições vêm de `GET /crm/v1/panel/{id}/custom-fields` (traz `id`, `name`, `key`, `type`). Chaves inválidas ou tipos incompatíveis são **ignorados silenciosamente**. O card grava "Agendado em"/"Agendado para" aqui (não mais no `dueDate`); a data da consulta deixou de ir no vencimento
 
 Documentação local: `Docs/clinicorp-api-docs/` e `Docs/Documentação API Helena/`.
 
@@ -104,3 +105,4 @@ Documentação local: `Docs/clinicorp-api-docs/` e `Docs/Documentação API Hele
 ## Débitos técnicos conhecidos
 
 1. env var `VITE_ADMIN_PASSWORD` obsoleta na Vercel — remover manualmente no dashboard
+2. Formato do **valor** enviado a um campo personalizado datetime do Helena ainda não confirmado com dado real (nenhuma clínica de teste tinha campo datetime). O código envia ISO 8601 (`new Date(...).toISOString()`, mesmo formato aceito pelo `dueDate`); validar no primeiro agendamento real após a clínica criar os campos

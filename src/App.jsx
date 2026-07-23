@@ -377,18 +377,39 @@ function App() {
       }
 
       const card       = await findCardByContact(activeContactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
-      const dueDateTime = selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot.from}:00` : null
       const pickedTags  = [...selectedTagIds]
+
+      // Campos personalizados de data do card: "Agendado em" (agora) e
+      // "Agendado para" (a consulta). Só preenche os campos mapeados no painel.
+      const cardCustomFields = {}
+      if (activePanel?.agendadoEmFieldKey) {
+        cardCustomFields[activePanel.agendadoEmFieldKey] = new Date().toISOString()
+      }
+      if (selectedDate && selectedSlot && activePanel?.agendadoParaFieldKey) {
+        cardCustomFields[activePanel.agendadoParaFieldKey] =
+          new Date(`${selectedDate}T${selectedSlot.from}:00`).toISOString()
+      }
+
+      // Descrição do agendamento no Clinicorp: autoria (etiquetas escolhidas)
+      // + observações. As etiquetas identificam a CRC que agendou.
+      const tagLabels = pickedTags
+        .map(id => panelTags.find(t => t.id === id)?.label)
+        .filter(Boolean)
+      const authorLine = tagLabels.length > 0
+        ? `Agendado por ${tagLabels.join(', ')} dentro da plataforma.`
+        : 'Agendado pela plataforma.'
+      const obs = descricao.trim()
+      const clinicorpNotes = authorLine + (obs ? ` Descrição: ${obs}` : '')
 
       if (card) {
         // Mescla com as etiquetas que o card já tem para não removê-las
         const mergedTags = pickedTags.length > 0
           ? [...new Set([...(card.tagIds ?? []), ...pickedTags])]
           : null
-        await updateCardStep(card.id, effectiveAgendadoStepId, idconta, dueDateTime, mergedTags)
+        await updateCardStep(card.id, effectiveAgendadoStepId, idconta, cardCustomFields, mergedTags)
         if (finalDescription) await addCardNote(card.id, finalDescription, idconta)
       } else {
-        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, activeContactId, idconta, dueDateTime, pickedTags)
+        await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, activeContactId, idconta, cardCustomFields, pickedTags)
       }
 
       let clinicorpStatus = null
@@ -401,7 +422,7 @@ function App() {
             dateLocal:    selectedDate,
             fromTime:     selectedSlot.from,
             toTime:       selectedSlot.to,
-            notes:        finalDescription || 'Agendamento via Schedule Button',
+            notes:        clinicorpNotes,
           }, idconta, activeUnit?.id)
           clinicorpStatus = 'ok'
         } catch (err) {

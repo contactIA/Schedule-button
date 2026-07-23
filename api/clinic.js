@@ -58,6 +58,9 @@ export default async function handler(req, res) {
           agendadoStepId: p.agendadoStepId,
           // null = sem restrição (clínicas cadastradas antes do recurso)
           allowedTagIds: Array.isArray(p.allowedTagIds) ? p.allowedTagIds : null,
+          // Chaves dos campos personalizados datetime do card (null = não mapeado)
+          agendadoEmFieldKey:   p.agendadoEmFieldKey   ?? null,
+          agendadoParaFieldKey: p.agendadoParaFieldKey ?? null,
           // Steps vêm do banco clínica (todos os painéis compartilham os steps do painel principal por ora)
           steps:         clinicSteps,
         }))
@@ -66,6 +69,8 @@ export default async function handler(req, res) {
           name:          clinic.name,
           agendadoStepId: clinic.helena_agendado_step_id,
           allowedTagIds: null,
+          agendadoEmFieldKey:   null,
+          agendadoParaFieldKey: null,
           steps:         clinicSteps,
         }]
 

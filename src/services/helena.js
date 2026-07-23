@@ -75,12 +75,12 @@ export async function getPanelData(panelId, idconta) {
 }
 
 
-export async function updateCardStep(cardId, stepId, idconta, dueDate = null, tagIds = null) {
+export async function updateCardStep(cardId, stepId, idconta, customFields = null, tagIds = null) {
   const fields = ['stepId']
   const payload = { fields, stepId }
-  if (dueDate) {
-    fields.push('dueDate')
-    payload.dueDate = new Date(dueDate).toISOString()
+  if (customFields && Object.keys(customFields).length) {
+    fields.push('customFields')
+    payload.customFields = customFields
   }
   if (tagIds?.length) {
     fields.push('tagIds')
@@ -153,10 +153,10 @@ export async function scheduleReminder(cfg, data, idconta) {
   return res.json()
 }
 
-export async function createCard(stepId, panelId, title, description, contactId, idconta, dueDate = null, tagIds = null) {
+export async function createCard(stepId, panelId, title, description, contactId, idconta, customFields = null, tagIds = null) {
   const payload = { panelId, stepId, title, description: description || null }
   if (contactId) payload.contactIds = [contactId]
-  if (dueDate) payload.dueDate = new Date(dueDate).toISOString()
+  if (customFields && Object.keys(customFields).length) payload.customFields = customFields
   if (tagIds?.length) payload.tagIds = tagIds
 
   const res = await proxyFetch('/crm/v1/panel/card', idconta, {

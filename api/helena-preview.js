@@ -102,6 +102,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Nenhum painel encontrado nesta conta Helena.' })
     }
 
+    // Campos personalizados de cada painel — para mapear "Agendado em/para".
+    // A chave enviada no card é o `key` (slug) do campo. Falha aqui não
+    // bloqueia o cadastro, só deixa o painel sem opções de mapeamento.
+    await Promise.all(panels.map(async (p) => {
+      const cf = await helenaGet(`/crm/v1/panel/${p.id}/custom-fields?NestedList=false`, token)
+      p.customFields = cf.ok && Array.isArray(cf.body)
+        ? cf.body
+            .filter(f => f.visible !== false && f.key)
+            .map(f => ({ key: f.key, name: f.name ?? f.key, type: f.type ?? '' }))
+        : []
+    }))
+
     return res.status(200).json({ panels, channels, totalPanels: body.totalItems ?? panels.length })
 
   } catch (err) {

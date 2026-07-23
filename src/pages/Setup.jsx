@@ -23,6 +23,10 @@ function buildPickedPanel(panel) {
     tags:          panel.tags  ?? [],
     // Todas permitidas por padrão; admin desmarca as restritas
     allowedTagIds: (panel.tags ?? []).map(t => t.id),
+    // Campos personalizados disponíveis + mapeamento das datas do card
+    customFields:         panel.customFields ?? [],
+    agendadoEmFieldKey:   '',
+    agendadoParaFieldKey: '',
   }
 }
 
@@ -369,6 +373,53 @@ function PanelPicker({ panels, picked, onTogglePanel, onUpdatePanel, onToggleTag
                     </span>
                   </div>
                 )}
+
+                <div className="admin-field">
+                  <label>Campos de data do card</label>
+                  {p.customFields.length === 0 ? (
+                    <span className="admin-field-hint">
+                      Nenhum campo personalizado neste painel. Crie os campos (tipo data/hora)
+                      no Helena para poder mapear "Agendado em" e "Agendado para".
+                    </span>
+                  ) : (
+                    <>
+                      <div className="admin-field">
+                        <label style={{ fontWeight: 400 }}>Campo "Agendado em" (quando o agendamento foi feito)</label>
+                        <select
+                          className="step-select"
+                          value={p.agendadoEmFieldKey ?? ''}
+                          onChange={e => onUpdatePanel(panel.id, 'agendadoEmFieldKey', e.target.value)}
+                        >
+                          <option value="">Não preencher</option>
+                          {p.customFields.map(f => (
+                            <option key={f.key} value={f.key}>
+                              {f.name}{f.type ? ` (${f.type})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="admin-field">
+                        <label style={{ fontWeight: 400 }}>Campo "Agendado para" (data da consulta)</label>
+                        <select
+                          className="step-select"
+                          value={p.agendadoParaFieldKey ?? ''}
+                          onChange={e => onUpdatePanel(panel.id, 'agendadoParaFieldKey', e.target.value)}
+                        >
+                          <option value="">Não preencher</option>
+                          {p.customFields.map(f => (
+                            <option key={f.key} value={f.key}>
+                              {f.name}{f.type ? ` (${f.type})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <span className="admin-field-hint">
+                        Use campos do tipo data/hora. A data da consulta deixou de ir no
+                        vencimento (dueDate) do card.
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -798,6 +849,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
           const panel = live.find(p => p.id === saved.id)
           if (!panel) return null // painel apagado no Helena
           const base = buildPickedPanel(panel)
+          const hasField = (key) => base.customFields.some(f => f.key === key)
           return {
             ...base,
             displayName:   saved.name || base.displayName,
@@ -805,6 +857,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             allowedTagIds: Array.isArray(saved.allowedTagIds)
               ? saved.allowedTagIds.filter(id => base.tags.some(t => t.id === id))
               : base.allowedTagIds,
+            agendadoEmFieldKey:   hasField(saved.agendadoEmFieldKey)   ? saved.agendadoEmFieldKey   : '',
+            agendadoParaFieldKey: hasField(saved.agendadoParaFieldKey) ? saved.agendadoParaFieldKey : '',
           }
         }).filter(Boolean)
 
@@ -847,6 +901,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             name:          p.displayName || p.name,
             agendadoStepId: p.agendadoStepId,
             allowedTagIds: p.allowedTagIds,
+            agendadoEmFieldKey:   p.agendadoEmFieldKey   || null,
+            agendadoParaFieldKey: p.agendadoParaFieldKey || null,
           })),
           helenaSteps: (pickedPanels[0]?.steps ?? []).map(s => ({ id: s.id, name: s.title || s.name || s.id })),
         }),
@@ -1159,6 +1215,8 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
             name:          p.displayName || p.name,
             agendadoStepId: p.agendadoStepId,
             allowedTagIds: p.allowedTagIds,
+            agendadoEmFieldKey:   p.agendadoEmFieldKey   || null,
+            agendadoParaFieldKey: p.agendadoParaFieldKey || null,
           })),
           scheduledMessage: reminder ?? undefined,
           units: units.map(u => ({
