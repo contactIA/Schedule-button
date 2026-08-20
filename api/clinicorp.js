@@ -85,11 +85,14 @@ export default async function handler(req, res) {
       const patient = await findPatientByPhone(phone, auth, subscriberId)
       if (!patient) return res.status(200).json({ found: false, appointments: [] })
 
-      const fmt  = d => d.toISOString().slice(0, 10)
-      const from = new Date(); from.setFullYear(from.getFullYear() - 1)
-      const to   = new Date(); to.setMonth(to.getMonth() + 6)
+      // Janela ancorada na data de Brasília (UTC-3), não na do servidor
+      // Vercel, que roda em UTC e já virou o dia depois das 21h
+      const fmt = dt => dt.toISOString().slice(0, 10)
+      const [y, m, d] = fmt(new Date(Date.now() - 3 * 3600000)).split('-').map(Number)
+      const from = fmt(new Date(Date.UTC(y - 1, m - 1, d)))
+      const to   = fmt(new Date(Date.UTC(y, m + 5, d)))
       const url = `${BASE}/appointment/list?subscriber_id=${subscriberId}` +
-        `&from=${fmt(from)}&to=${fmt(to)}&patientId=${patient.patientId}`
+        `&from=${from}&to=${to}&patientId=${patient.patientId}`
       const { ok, status, body } = await clinicorpFetch(url, auth)
       if (!ok) return res.status(status).json({
         error: body.Message || body.message || 'Erro ao buscar histórico no Clinicorp',

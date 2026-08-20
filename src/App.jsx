@@ -7,7 +7,7 @@ import { fetchClinicorpSlots, fetchClinicorpDays, fetchClinicorpHistory, schedul
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
-import { toDateStr, toBrDate } from './utils/date'
+import { toDateStr, toBrDate, toBrasiliaIso, prevDateStr, brTodayStr } from './utils/date'
 import './App.css'
 
 // Detecta números privados/mascarados do WhatsApp (lid@, @g.us, etc.)
@@ -29,24 +29,22 @@ function stripCountryCode(phone) {
   return digits
 }
 
-// Momento de envio do lembrete conforme a regra da clínica.
+// Momento de envio do lembrete conforme a regra da clínica. Todos os
+// horários são de Brasília, não do fuso da máquina do operador.
 // Nunca devolve um instante no passado — cai para daqui a 5 minutos.
 function reminderScheduling(timing, dateStr, fromTime) {
-  const appt = new Date(`${dateStr}T${fromTime}:00`)
+  const apptMs = new Date(toBrasiliaIso(dateStr, fromTime)).getTime()
   let when
   if (timing?.mode === 'immediate') {
-    when = new Date(Date.now() + 2 * 60000)
+    when = Date.now() + 2 * 60000
   } else if (timing?.mode === 'hours_before') {
-    when = new Date(appt.getTime() - (timing.hours ?? 24) * 3600000)
+    when = apptMs - (timing.hours ?? 24) * 3600000
   } else {
     // day_before (padrão): véspera no horário configurado
-    const [h, m] = (timing?.time ?? '18:00').split(':')
-    when = new Date(appt)
-    when.setDate(when.getDate() - 1)
-    when.setHours(Number(h), Number(m || 0), 0, 0)
+    when = new Date(toBrasiliaIso(prevDateStr(dateStr), timing?.time ?? '18:00')).getTime()
   }
-  if (when.getTime() <= Date.now()) when = new Date(Date.now() + 5 * 60000)
-  return when.toISOString()
+  if (when <= Date.now()) when = Date.now() + 5 * 60000
+  return new Date(when).toISOString()
 }
 
 // Parâmetros da URL — fixos durante toda a sessão
@@ -78,8 +76,8 @@ function NoClinic() {
 
 // ── App principal ─────────────────────────────────────────────────
 function App() {
-  const today    = new Date()
-  const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
+  const todayStr = brTodayStr()
+  const [todayYear, todayMonth] = todayStr.split('-').map(Number)
 
   // Config da clínica (carregada do Supabase via /api/clinic)
   const [clinicConfig,  setClinicConfig]  = useState(null)
@@ -118,8 +116,8 @@ function App() {
   const [contactSearchMsg, setContactSearchMsg] = useState('')
 
   // Calendário
-  const [viewYear,  setViewYear]  = useState(today.getFullYear())
-  const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const [viewYear,  setViewYear]  = useState(todayYear)
+  const [viewMonth, setViewMonth] = useState(todayMonth - 1)
   const [selectedDate,   setSelectedDate]   = useState(null)
   const [availableSlots, setAvailableSlots] = useState([])
   const [slotsLoading,   setSlotsLoading]   = useState(false)
@@ -387,7 +385,7 @@ function App() {
       }
       if (selectedDate && selectedSlot && activePanel?.agendadoParaFieldKey) {
         cardCustomFields[activePanel.agendadoParaFieldKey] =
-          new Date(`${selectedDate}T${selectedSlot.from}:00`).toISOString()
+          toBrasiliaIso(selectedDate, selectedSlot.from)
       }
 
       // Descrição do agendamento no Clinicorp: autoria (etiquetas escolhidas)

@@ -67,6 +67,7 @@ A clínica é identificada por `?idconta=` (companyId da conta Helena → `clini
 - Sem abstrações prematuras — 3 linhas repetidas não justificam um helper
 - Erros de API logam no console com prefixo `[NomeDoServico]` para facilitar debug
 - Falhas em recursos informativos (histórico, disponibilidade, lembrete) nunca bloqueiam o fluxo principal
+- **Fuso canônico: America/Sao_Paulo (UTC-3 fixo).** Nunca use `new Date('YYYY-MM-DDTHH:mm')` sem offset — isso adota o fuso da máquina do operador. Use `toBrasiliaIso`/`prevDateStr`/`brTodayStr` de `src/utils/date.js`; no backend (Vercel roda em UTC), ancore a data com `Date.now() - 3 * 3600000`
 
 ---
 
