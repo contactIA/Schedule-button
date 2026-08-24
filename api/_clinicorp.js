@@ -44,3 +44,23 @@ export async function fetchProfessionals(user, token, subscriberId) {
       return true
     })
 }
+
+// Busca categorias de agendamento cadastradas na unidade Clinicorp — para o
+// admin escolher qual usar como padrão (CategoryDescription/CategoryColor
+// do create_appointment_by_api precisam bater com uma categoria existente,
+// senão o Clinicorp recusa o agendamento com "CategoryDescription não encontrada")
+export async function fetchCategories(user, token, subscriberId) {
+  const auth = clinicorpAuth(user, token)
+  const { body } = await clinicorpGet(`/appointment/list_categories?subscriber_id=${subscriberId}`, auth)
+  const seen = new Set()
+  return (Array.isArray(body) ? body : [])
+    .map(c => ({
+      description: (c.Description ?? c.CategoryDescription ?? c.description ?? c.Name ?? c.name ?? '').trim(),
+      color:       c.Color ?? c.CategoryColor ?? c.color ?? '',
+    }))
+    .filter(c => {
+      if (!c.description || seen.has(c.description)) return false
+      seen.add(c.description)
+      return true
+    })
+}
