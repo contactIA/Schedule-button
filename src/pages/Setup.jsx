@@ -568,16 +568,9 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
   const [profError,   setProfError]   = useState('')
   const [bookableIds, setBookableIds] = useState(unit?.bookableProfessionalIds ?? [])
 
-  // Categoria de agendamento — mesma ideia: lista vem ao vivo do Clinicorp,
-  // o admin só escolhe qual usar como padrão nos agendamentos desta unidade
-  const [catList,             setCatList]             = useState(null)
-  const [catError,            setCatError]            = useState('')
-  const [categoryDescription, setCategoryDescription] = useState(unit?.categoryDescription ?? '')
-  const [categoryColor,       setCategoryColor]       = useState(unit?.categoryColor ?? '')
-
   useEffect(() => {
     if (!expanded || isNew || profList !== null) return
-    fetch(`/api/units?id=${unit.id}&professionals=1&categories=1`, { headers: { 'x-admin-key': adminKey } })
+    fetch(`/api/units?id=${unit.id}&professionals=1`, { headers: { 'x-admin-key': adminKey } })
       .then(async r => {
         const d = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(d.error || `Erro HTTP ${r.status}`)
@@ -586,15 +579,9 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
       .then(d => {
         setProfList(d.professionals ?? [])
         setBookableIds(d.bookableProfessionalIds ?? [])
-        setCatList(d.categories ?? [])
-        if (d.selectedCategory?.description) {
-          setCategoryDescription(d.selectedCategory.description)
-          setCategoryColor(d.selectedCategory.color ?? '')
-        }
       })
       .catch(err => {
         setProfList([]); setProfError(err.message)
-        setCatList([]); setCatError(err.message)
       })
   }, [expanded]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -635,10 +622,6 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
       if (profList !== null && JSON.stringify([...bookableIds].sort()) !== JSON.stringify([...savedIds].sort())) {
         body.bookableProfessionalIds = bookableIds
       }
-      if (catList !== null && categoryDescription !== (unit.categoryDescription ?? '')) {
-        body.clinicorpCategoryDescription = categoryDescription
-        body.clinicorpCategoryColor = categoryColor
-      }
       if (Object.keys(body).length === 1) {
         setError('Nenhuma alteração para salvar.')
         return
@@ -650,8 +633,6 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
       const data = isNew ? await call('POST', body) : await call('PUT', body)
       setToken('')
       setBookableIds(data.unit?.bookableProfessionalIds ?? [])
-      setCategoryDescription(data.unit?.categoryDescription ?? '')
-      setCategoryColor(data.unit?.categoryColor ?? '')
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2500)
       onSaved(data.unit)
@@ -777,44 +758,6 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
                     {bookableIds.length === 0
                       ? 'Nenhum selecionado = todos aparecem para agendamento.'
                       : 'Somente os selecionados aparecem para agendamento. Salvo com "Salvar unidade".'}
-                  </span>
-                </>
-              )}
-            </div>
-          )}
-
-          {!isNew && (
-            <div className="admin-field">
-              <label>Categoria de agendamento</label>
-              {catList === null && !catError && (
-                <span className="admin-field-hint">Carregando categorias do Clinicorp...</span>
-              )}
-              {catError && <span className="admin-field-hint">⚠ {catError}</span>}
-              {catList !== null && !catError && catList.length === 0 && (
-                <span className="admin-field-hint">
-                  Nenhuma categoria de agendamento encontrada no Clinicorp desta unidade.
-                  Cadastre uma categoria lá antes de agendar por aqui.
-                </span>
-              )}
-              {catList?.length > 0 && (
-                <>
-                  <select
-                    className="step-select"
-                    value={categoryDescription}
-                    onChange={e => {
-                      const desc = e.target.value
-                      setCategoryDescription(desc)
-                      setCategoryColor(catList.find(c => c.description === desc)?.color ?? '')
-                    }}
-                  >
-                    <option value="">Usar padrão do sistema (AVALIAÇÃO)</option>
-                    {catList.map(c => (
-                      <option key={c.description} value={c.description}>{c.description}</option>
-                    ))}
-                  </select>
-                  <span className="admin-field-hint">
-                    Categoria usada ao criar o agendamento no Clinicorp. Precisa bater com uma
-                    categoria já cadastrada lá, senão o agendamento é recusado.
                   </span>
                 </>
               )}

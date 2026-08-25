@@ -73,13 +73,6 @@ export default async function handler(req, res) {
   const subscriberId = unit.clinicorp_subscriber_id
   const businessId   = unit.clinicorp_business_id
   const codeLink     = unit.clinicorp_code_link
-  // Sem fallback hardcoded: CategoryColor/CategoryDescription não são campos
-  // documentados pelo create_appointment_by_api, e mesmo com uma categoria
-  // real cadastrada no Clinicorp o endpoint pode recusar com "CategoryDescription
-  // não encontrada" — melhor só mandar quando a unidade tiver um valor
-  // explicitamente configurado (e mesmo assim pode falhar; ver CLAUDE.md)
-  const categoryColor       = unit.clinicorp_category_color       || null
-  const categoryDescription = unit.clinicorp_category_description || null
 
   // ── GET ?history=1&phone=: agendamentos anteriores do paciente ──
   if (req.method === 'GET' && req.query?.history) {
@@ -208,9 +201,6 @@ export default async function handler(req, res) {
       date:               `${dateLocal}T03:00:00.000Z`,
       fromTime, toTime,
       Notes:              notes || 'Agendamento via Schedule Button',
-      ...(categoryDescription && categoryColor
-        ? { CategoryColor: categoryColor, CategoryDescription: categoryDescription }
-        : {}),
     }
 
     const { ok, status, body } = await clinicorpFetch(

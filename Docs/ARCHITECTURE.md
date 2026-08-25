@@ -51,7 +51,6 @@ Reduzir a entrada humana ao mínimo: **Token Helena + Usuário Clinicorp + Token
 | Unidades | `GET /business/list` | Seleciona qual unidade |
 | CODE_LINK | Retorna junto com a unidade | Automático |
 | Profissionais | `GET /professional/list_all_professionals` | Marca quais fazem avaliação |
-| Categorias | `GET /appointment/list_categories` | Escolhe categoria padrão |
 
 ### Resultado
 Onboarding de ~45min para ~5min, sem necessidade de dev após o painel admin estar pronto.

@@ -42,7 +42,7 @@ Etapa 2 — Calendário
 
 1. Busca card existente do contato → **cria** (com `tagIds`) ou **move** para a etapa "Agendado" configurada
 2. Etiquetas selecionadas são **mescladas** com as que o card já tem — nada é removido
-3. Se houver slot: busca paciente no Clinicorp pelo telefone → cria se não existir → cria o agendamento (cor e categoria configuráveis por unidade; padrão `#ffff00` / `AVALIAÇÃO`)
+3. Se houver slot: busca paciente no Clinicorp pelo telefone → cria se não existir → cria o agendamento (sem categoria/cor — `CategoryDescription` não é confiável em todas as contas Clinicorp, ver débitos técnicos)
 4. Com o Clinicorp confirmado e o lembrete ativado na clínica: agenda mensagem de template por WhatsApp via app "Mensagens agendadas" do Helena — na véspera às HH:MM, X horas antes ou logo após o agendamento. **Falha no lembrete nunca desfaz card/agendamento** (aviso amarelo ao operador)
 
 ---
@@ -142,8 +142,6 @@ units (
   clinicorp_subscriber_id text,
   clinicorp_business_id bigint,
   clinicorp_code_link int,
-  clinicorp_category_color text,        -- padrão '#ffff00'
-  clinicorp_category_description text,  -- padrão 'AVALIAÇÃO'
   active boolean DEFAULT true
 )
 

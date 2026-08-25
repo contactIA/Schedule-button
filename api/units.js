@@ -1,6 +1,6 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
-import { fetchBusinessId, fetchProfessionals, fetchCategories } from './_clinicorp.js'
+import { fetchBusinessId, fetchProfessionals } from './_clinicorp.js'
 
 function toClient(u) {
   return {
@@ -13,8 +13,6 @@ function toClient(u) {
     businessId:    u.clinicorp_business_id,
     codeLink:      u.clinicorp_code_link,
     bookableProfessionalIds: u.bookable_professional_ids ?? null,
-    categoryDescription: u.clinicorp_category_description ?? null,
-    categoryColor:       u.clinicorp_category_color ?? null,
   }
 }
 
@@ -24,40 +22,26 @@ export default async function handler(req, res) {
 
   const db = getSupabase()
 
-  // ── GET ?id=&professionals=1&categories=1 → dados ao vivo do Clinicorp ─
-  // Nada de tabela sincronizada: nomes/categorias vêm direto da unidade certa.
+  // ── GET ?id=&professionals=1 → dados ao vivo do Clinicorp ───────
+  // Nada de tabela sincronizada: nomes vêm direto da unidade certa.
   if (req.method === 'GET') {
-    const { id, professionals, categories } = req.query ?? {}
-    if (!id || (!professionals && !categories)) {
-      return res.status(400).json({ error: 'Use ?id=<unitId>&professionals=1 e/ou &categories=1' })
+    const { id, professionals } = req.query ?? {}
+    if (!id || !professionals) {
+      return res.status(400).json({ error: 'Use ?id=<unitId>&professionals=1' })
     }
     try {
       const { data: unit } = await db.from('units').select('*').eq('id', id).maybeSingle()
       if (!unit) return res.status(404).json({ error: 'Unidade não encontrada.' })
 
-      const result = {}
-      if (professionals) {
-        result.professionals = await fetchProfessionals(
+      const result = {
+        professionals: await fetchProfessionals(
           unit.clinicorp_user, unit.clinicorp_token, unit.clinicorp_subscriber_id
-        )
-        result.bookableProfessionalIds = unit.bookable_professional_ids ?? null
-      }
-      if (categories) {
-        result.categories = await fetchCategories(
-          unit.clinicorp_user, unit.clinicorp_token, unit.clinicorp_subscriber_id
-        )
-        // Só reporta como "selecionada" se o valor salvo ainda existir na
-        // lista ao vivo — senão o Setup mostraria um valor obsoleto como se
-        // já estivesse configurado e validado, escondendo a necessidade de
-        // o admin escolher de novo
-        const stillExists = result.categories.some(c => c.description === unit.clinicorp_category_description)
-        result.selectedCategory = stillExists
-          ? { description: unit.clinicorp_category_description, color: unit.clinicorp_category_color ?? null }
-          : { description: null, color: null }
+        ),
+        bookableProfessionalIds: unit.bookable_professional_ids ?? null,
       }
       return res.status(200).json(result)
     } catch (err) {
-      console.error('[units] GET professionals/categories:', err.message)
+      console.error('[units] GET professionals:', err.message)
       return res.status(500).json({ error: err.message })
     }
   }
@@ -115,7 +99,7 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     const {
       id, name, clinicorpUser, clinicorpToken, subscriberId, codeLink, active,
-      bookableProfessionalIds, clinicorpCategoryDescription, clinicorpCategoryColor,
+      bookableProfessionalIds,
     } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
@@ -147,15 +131,6 @@ export default async function handler(req, res) {
         patch.bookable_professional_ids = bookableProfessionalIds.length > 0
           ? bookableProfessionalIds.map(String)
           : null
-      }
-      // Categoria escolhida a partir da lista ao vivo do Clinicorp — precisa
-      // bater exatamente com o cadastro de lá (create_appointment_by_api falha
-      // com "CategoryDescription não encontrada" se o texto não existir)
-      if (typeof clinicorpCategoryDescription === 'string') {
-        patch.clinicorp_category_description = clinicorpCategoryDescription.trim() || null
-      }
-      if (typeof clinicorpCategoryColor === 'string') {
-        patch.clinicorp_category_color = clinicorpCategoryColor.trim() || null
       }
 
       // Credencial trocou → revalida businessId/codeLink no Clinicorp
