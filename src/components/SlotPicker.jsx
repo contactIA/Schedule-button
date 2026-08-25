@@ -1,3 +1,5 @@
+import { firstName } from '../utils/name'
+
 export default function SlotPicker({ loading, error, slots, selectedSlot, onSelectSlot, emptyMessage }) {
   if (loading) {
     return (
@@ -28,7 +30,7 @@ export default function SlotPicker({ loading, error, slots, selectedSlot, onSele
             onClick={() => onSelectSlot(isActive ? null : slot)}
           >
             <span className="slot-row-time">{slot.from} às {slot.to}</span>
-            {slot.professionalName && <span className="slot-row-prof">{slot.professionalName.split(' ')[0]}</span>}
+            {slot.professionalName && <span className="slot-row-prof">{firstName(slot.professionalName)}</span>}
           </button>
         )
       })}

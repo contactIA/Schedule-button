@@ -8,6 +8,7 @@ import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
 import { toDateStr, toBrDate, toBrasiliaIso, prevDateStr, brTodayStr } from './utils/date'
+import { firstName } from './utils/name'
 import './App.css'
 
 // Detecta números privados/mascarados do WhatsApp (lid@, @g.us, etc.)
@@ -526,7 +527,7 @@ function App() {
   // Dentistas presentes nos horários do dia — nome vem do próprio slot
   const slotDentists = [...new Set(availableSlots.map(s => s.professionalId))].map(pid => {
     const slot = availableSlots.find(s => s.professionalId === pid)
-    return { id: pid, name: slot?.professionalName?.split(' ')[0] || 'Profissional' }
+    return { id: pid, name: firstName(slot?.professionalName) || 'Profissional' }
   })
   const visibleSlots = selectedDentistId
     ? availableSlots.filter(s => s.professionalId === selectedDentistId)
@@ -709,7 +710,7 @@ function App() {
                             <span className="history-date">
                               {toBrDate(a.date)}{a.from ? ` às ${a.from}` : ''}
                             </span>
-                            {a.dentist && <span className="history-dentist">{a.dentist.split(' ')[0]}</span>}
+                            {a.dentist && <span className="history-dentist">{firstName(a.dentist)}</span>}
                             {a.status && <span className="history-status">{a.status}</span>}
                           </div>
                         ))}
@@ -820,7 +821,7 @@ function App() {
               {selectedSlot && (
                 <div className="slot-summary">
                   ✓ {selectedDate} às {selectedSlot.from}
-                  {selectedSlot.professionalName ? ` · ${selectedSlot.professionalName.split(' ')[0]}` : ''}
+                  {selectedSlot.professionalName ? ` · ${firstName(selectedSlot.professionalName)}` : ''}
                 </div>
               )}
 
@@ -874,7 +875,7 @@ function App() {
                         <span>📅 {toBrDate(selectedDate)}</span>
                         <span>🕐 {selectedSlot.from}</span>
                         {selectedSlot.professionalName && (
-                          <span>🦷 {selectedSlot.professionalName.split(' ')[0]}</span>
+                          <span>🦷 {firstName(selectedSlot.professionalName)}</span>
                         )}
                       </div>
                     </div>
