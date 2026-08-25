@@ -46,10 +46,14 @@ export default async function handler(req, res) {
         result.categories = await fetchCategories(
           unit.clinicorp_user, unit.clinicorp_token, unit.clinicorp_subscriber_id
         )
-        result.selectedCategory = {
-          description: unit.clinicorp_category_description ?? null,
-          color:       unit.clinicorp_category_color ?? null,
-        }
+        // Só reporta como "selecionada" se o valor salvo ainda existir na
+        // lista ao vivo — senão o Setup mostraria um valor obsoleto como se
+        // já estivesse configurado e validado, escondendo a necessidade de
+        // o admin escolher de novo
+        const stillExists = result.categories.some(c => c.description === unit.clinicorp_category_description)
+        result.selectedCategory = stillExists
+          ? { description: unit.clinicorp_category_description, color: unit.clinicorp_category_color ?? null }
+          : { description: null, color: null }
       }
       return res.status(200).json(result)
     } catch (err) {
