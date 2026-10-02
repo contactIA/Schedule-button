@@ -550,7 +550,7 @@ function ClinicList({ clinics, flash, onEdit, onNew }) {
 // Token Clinicorp é write-only: o campo sempre inicia vazio e só é
 // enviado quando preenchido. Trocar credencial revalida businessId
 // e codeLink no servidor.
-function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) {
+function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDeleted }) {
   const isNew = !unit
   const [expanded,     setExpanded]     = useState(isNew)
   const [name,         setName]         = useState(unit?.name ?? '')
@@ -567,6 +567,10 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
   const [profList,    setProfList]    = useState(null)
   const [profError,   setProfError]   = useState('')
   const [bookableIds, setBookableIds] = useState(unit?.bookableProfessionalIds ?? [])
+
+  // Unidade no CRM ('' = Sem unidade). Lista vem do EditClinic (crm.units)
+  const [crmUnitId, setCrmUnitId] = useState(unit?.crmUnitId ?? '')
+  const crmUnits = crm?.units ?? null
 
   useEffect(() => {
     if (!expanded || isNew || profList !== null) return
@@ -622,6 +626,7 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
       if (profList !== null && JSON.stringify([...bookableIds].sort()) !== JSON.stringify([...savedIds].sort())) {
         body.bookableProfessionalIds = bookableIds
       }
+      if (crmUnits !== null && crmUnitId !== (unit.crmUnitId ?? '')) body.crmUnitId = crmUnitId || null
       if (Object.keys(body).length === 1) {
         setError('Nenhuma alteração para salvar.')
         return
@@ -633,6 +638,7 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
       const data = isNew ? await call('POST', body) : await call('PUT', body)
       setToken('')
       setBookableIds(data.unit?.bookableProfessionalIds ?? [])
+      setCrmUnitId(data.unit?.crmUnitId ?? '')
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2500)
       onSaved(data.unit)
@@ -764,6 +770,34 @@ function UnitEditor({ adminKey, clinicId, unit, onSaved, onCancel, onDeleted }) 
             </div>
           )}
 
+          {!isNew && crm?.hasKey && (
+            <div className="admin-field">
+              <label>Unidade no CRM</label>
+              {crmUnits === null && !crm.error && (
+                <span className="admin-field-hint">Carregando unidades do CRM...</span>
+              )}
+              {crm.error && <span className="admin-field-hint">⚠ {crm.error}</span>}
+              {crmUnits !== null && (
+                <>
+                  <select className="step-select" value={crmUnitId} onChange={e => setCrmUnitId(e.target.value)}>
+                    <option value="">Sem unidade</option>
+                    {crmUnits.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>
+                    ))}
+                    {crmUnitId && !crmUnits.some(u => u.id === crmUnitId) && (
+                      <option value={crmUnitId}>Unidade não encontrada no CRM</option>
+                    )}
+                  </select>
+                  <span className="admin-field-hint">
+                    {crmUnits.length === 0
+                      ? 'Nenhuma unidade cadastrada no CRM desta clínica. Os cards nascem "Sem unidade".'
+                      : 'Unidade dos cards novos no CRM. Sem unidade escolhida, o card nasce "Sem unidade". Salvo com "Salvar unidade".'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
           {error   && <div className="admin-error-box">{error}</div>}
           {savedOk && <div className="clinic-flash">✓ Unidade salva.</div>}
 
@@ -811,6 +845,11 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
   const [clinicActive,  setClinicActive]  = useState(true)
   const [units,         setUnits]         = useState([])
   const [addingUnit,    setAddingUnit]    = useState(false)
+  // CRM ContactIA: chave write-only (como o token Helena) e unidades do CRM
+  const [crmEnabled,    setCrmEnabled]    = useState(false)
+  const [newCrmKey,     setNewCrmKey]     = useState('')
+  const [crmUnits,      setCrmUnits]      = useState(null)
+  const [crmUnitsError, setCrmUnitsError] = useState('')
 
   // Modelos do lembrete são buscados por canal, filtrados pela Helena
   const loadReminderTemplates = async (channelId) => {
@@ -843,6 +882,14 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
         setUnits(detail.units ?? [])
         setChannels(preview.channels ?? [])
         setReminder(normalizeReminder(detail.scheduledMessage))
+        setCrmEnabled(detail.crmEnabled === true)
+        // Unidades do CRM só com chave salva; falha não bloqueia a edição
+        if (detail.hasCrmKey) {
+          fetch(`/api/crm-preview?clinicId=${clinicId}&_t=${Date.now()}`, { headers })
+            .then(getJson)
+            .then(d => setCrmUnits(d.units ?? []))
+            .catch(err => setCrmUnitsError(err.message))
+        }
         const live = preview.panels ?? []
         setHelenaPanels(live)
 
@@ -896,6 +943,9 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
           slug,
           active:      clinicActive,
           helenaToken: newToken.trim() || undefined,
+          // Só vai o que mudou: o banco sem as colunas do CRM continua salvando
+          crmEnabled: crmEnabled !== (clinic.crmEnabled === true) ? crmEnabled : undefined,
+          crmApiKey:  newCrmKey.trim() || undefined,
           // undefined → não mexe na config salva (tolera banco sem a coluna)
           scheduledMessage: reminder ?? undefined,
           helenaPanels: pickedPanels.map(p => ({
@@ -1013,6 +1063,44 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
           />
 
           <div className="admin-field">
+            <label>Enviar ao CRM</label>
+            <button
+              type="button"
+              className={`reminder-toggle${crmEnabled ? ' reminder-toggle-on' : ''}`}
+              onClick={() => setCrmEnabled(v => !v)}
+            >
+              <span className="reminder-toggle-knob" />
+              {crmEnabled ? 'Ativado' : 'Desativado'}
+            </button>
+            <span className="admin-field-hint">
+              Além do painel Helena, cria e move o card no CRM ContactIA. Falha no CRM não impede
+              o agendamento. Salvo junto com "Salvar alterações".
+            </span>
+            {crmEnabled && (
+              <span className="admin-field-hint" style={{ color: '#b45309' }}>
+                <strong>Atenção:</strong> deixe desligado o lembrete de Agendados no CRM desta clínica,
+                para o paciente não receber dois lembretes.
+              </span>
+            )}
+          </div>
+
+          <div className="admin-field">
+            <label>Chave da API do CRM</label>
+            <input
+              type="password"
+              value={newCrmKey}
+              onChange={e => setNewCrmKey(e.target.value)}
+              placeholder={clinic.hasCrmKey ? 'Manter chave atual' : 'crm_...'}
+              autoComplete="new-password"
+            />
+            <span className="admin-field-hint">
+              {clinic.hasCrmKey
+                ? 'Preencha somente para substituir a chave atual. A conexão com o CRM é testada ao salvar.'
+                : 'Chave com escrita, criada pela equipe no setup do CRM. A conexão com o CRM é testada ao salvar.'}
+            </span>
+          </div>
+
+          <div className="admin-field">
             <label>Status da clínica</label>
             <button
               type="button"
@@ -1036,6 +1124,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
                   adminKey={adminKey}
                   clinicId={clinicId}
                   unit={u}
+                  crm={{ hasKey: clinic.hasCrmKey, units: crmUnits, error: crmUnitsError }}
                   onSaved={nu => setUnits(prev => prev.map(x => x.id === nu.id ? nu : x))}
                   onDeleted={id => setUnits(prev => prev.filter(x => x.id !== id))}
                 />

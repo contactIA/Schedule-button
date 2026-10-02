@@ -1,6 +1,7 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
 import { fetchBusinessId, fetchProfessionals } from './_clinicorp.js'
+import { isUuid } from './_crm.js'
 
 function toClient(u) {
   return {
@@ -13,6 +14,7 @@ function toClient(u) {
     businessId:    u.clinicorp_business_id,
     codeLink:      u.clinicorp_code_link,
     bookableProfessionalIds: u.bookable_professional_ids ?? null,
+    crmUnitId:     u.crm_unit_id ?? null,
   }
 }
 
@@ -99,7 +101,7 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     const {
       id, name, clinicorpUser, clinicorpToken, subscriberId, codeLink, active,
-      bookableProfessionalIds,
+      bookableProfessionalIds, crmUnitId,
     } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
@@ -131,6 +133,12 @@ export default async function handler(req, res) {
         patch.bookable_professional_ids = bookableProfessionalIds.length > 0
           ? bookableProfessionalIds.map(String)
           : null
+      }
+
+      // Unidade no CRM: vazio/null = "Sem unidade" no card novo
+      if (crmUnitId !== undefined) {
+        if (crmUnitId && !isUuid(crmUnitId)) return res.status(400).json({ error: 'Unidade do CRM inválida.' })
+        patch.crm_unit_id = crmUnitId || null
       }
 
       // Credencial trocou → revalida businessId/codeLink no Clinicorp

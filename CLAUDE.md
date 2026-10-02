@@ -38,6 +38,9 @@ api/clinics.js    → Lista/detalhe/edição de clínicas, sync de profissionais
 api/units.js      → Criação/edição/ativação de unidades (admin)
 api/helena-preview.js → Painéis, canais e modelos da conta Helena (admin)
 api/reminder-log.js → Grava auditoria das tentativas de lembrete (runtime, fire-and-forget)
+api/crm.js        → Espelha o card no CRM ContactIA (runtime, fire-and-forget, só com clinics.crm_enabled)
+api/_crm.js       → Cliente da API do CRM, regra criar/mover e teste de conexão (testes em api/*.test.js, `npm test`)
+api/crm-preview.js → Unidades do CRM da clínica para o seletor do Setup (admin, só leitura no CRM)
 api/_supabase.js  → Cliente Supabase + queries compartilhadas (não vira função)
 api/_clinicorp.js → fetchBusinessId/fetchProfessionals compartilhados
 api/_auth.js      → requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
@@ -55,6 +58,9 @@ O frontend nunca chama Clinicorp/Helena diretamente — sempre via `api/`. Token
 | Credenciais Clinicorp | Supabase `units.clinicorp_user/token/subscriber_id` |
 | Conexão Supabase | env vars `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` |
 | Senha do painel admin | env var `ADMIN_PASSWORD` (server-side, fail-closed) |
+| Chave da API do CRM ContactIA | Supabase `clinics.crm_api_key` (write-only no Setup, como o token Helena) |
+| Espelho no CRM por clínica/unidade | Supabase `clinics.crm_enabled`, `units.crm_unit_id` (Setup) |
+| Endereço da API do CRM | env var `CRM_API_URL` (opcional; padrão `https://crm.contactia.com.br/api/v1`) |
 
 A clínica é identificada por `?idconta=` (companyId da conta Helena → `clinics.helena_account_id`).
 
@@ -68,6 +74,20 @@ A clínica é identificada por `?idconta=` (companyId da conta Helena → `clini
 - Erros de API logam no console com prefixo `[NomeDoServico]` para facilitar debug
 - Falhas em recursos informativos (histórico, disponibilidade, lembrete) nunca bloqueiam o fluxo principal
 - **Fuso canônico: America/Sao_Paulo (UTC-3 fixo).** Nunca use `new Date('YYYY-MM-DDTHH:mm')` sem offset — isso adota o fuso da máquina do operador. Use `toBrasiliaIso`/`prevDateStr`/`brTodayStr` de `src/utils/date.js`; no backend (Vercel roda em UTC), ancore a data com `Date.now() - 3 * 3600000`
+
+---
+
+## Espelho no CRM ContactIA
+
+O card continua sendo criado/movido no painel nativo (Helena) como sempre. Nas clínicas com `clinics.crm_enabled = true`, depois do painel nativo gravado, o frontend chama `/api/crm` sem esperar a resposta, e o servidor:
+
+1. `POST /cards` com o telefone (idempotente: contato com card aberto volta `ja_aberto`; quem foi para Perda é reaberto)
+2. `POST /cards/{id}/mover` para `agendados`, com `agendadoPara` quando há horário (já em Agendados, só atualiza o "Agendado para")
+3. Card existente: a observação vira anotação (`POST /cards/{id}/anotacoes`)
+
+Configuração no Setup: em "Editar clínica", o interruptor "Enviar ao CRM" e a "Chave da API do CRM" (chave nova ou envio ligado testa a conexão com `GET /eu` e `GET /unidades` antes de gravar; chave só de leitura é recusada); em cada unidade, o seletor "Unidade no CRM". Com o envio ligado, o lembrete de Agendados do CRM deve ficar desligado na clínica, senão o paciente recebe dois (o do botão continua igual).
+
+A clínica do CRM vai no `X-Clinica` pelo `helena_account_id` (companyId). Card já no CRC2 não é movido. Falha no CRM só aparece no log da função (`[crm]`) e no console do operador — nunca bloqueia o agendamento. Migração das colunas: `supabase/migrations/20261002120000_crm_integration.sql`.
 
 ---
 

@@ -1,8 +1,9 @@
 import { getSupabase } from './_supabase.js'
 import { requireAdmin } from './_auth.js'
+import { crmClient, checkCrmConnection, crmClinicPatch } from './_crm.js'
 
 // Rotas admin de gestão de clínicas. Tokens nunca saem deste handler —
-// o detalhe expõe apenas hasToken e o PUT aceita token novo (write-only).
+// o detalhe expõe apenas hasToken/hasCrmKey e o PUT aceita token novo (write-only).
 export default async function handler(req, res) {
   if (!requireAdmin(req, res)) return
 
@@ -19,8 +20,10 @@ export default async function handler(req, res) {
         const clinic = data?.[0]
         if (!clinic) return res.status(404).json({ error: 'Clínica não encontrada.' })
 
+        // select('*') tolera o banco sem as colunas do CRM; o token Clinicorp
+        // não sai porque o map abaixo escolhe os campos
         const { data: units } = await db.from('units')
-          .select('id, name, active, position, clinicorp_user, clinicorp_subscriber_id, clinicorp_business_id, clinicorp_code_link')
+          .select('*')
           .eq('clinic_id', id)
           .order('position', { ascending: true })
 
@@ -35,6 +38,8 @@ export default async function handler(req, res) {
           helenaPanels:    clinic.helena_panels ?? [],
           scheduledMessage: clinic.scheduled_message ?? null,
           hasToken:        !!clinic.helena_token,
+          crmEnabled:      clinic.crm_enabled === true,
+          hasCrmKey:       !!clinic.crm_api_key,
           units: (units ?? []).map(u => ({
             id:            u.id,
             name:          u.name,
@@ -44,6 +49,7 @@ export default async function handler(req, res) {
             subscriberId:  u.clinicorp_subscriber_id,
             businessId:    u.clinicorp_business_id,
             codeLink:      u.clinicorp_code_link,
+            crmUnitId:     u.crm_unit_id ?? null,
           })),
         })
       }
@@ -77,7 +83,7 @@ export default async function handler(req, res) {
 
   // ── PUT → atualiza somente os campos enviados ───────────────────
   if (req.method === 'PUT') {
-    const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage, active } = req.body ?? {}
+    const { id, name, slug, helenaToken, helenaPanels, helenaSteps, scheduledMessage, active, crmEnabled, crmApiKey } = req.body ?? {}
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
     if (scheduledMessage?.enabled) {
@@ -114,6 +120,17 @@ export default async function handler(req, res) {
       if ('scheduledMessage' in (req.body ?? {})) patch.scheduled_message = scheduledMessage ?? null
 
       if (typeof active === 'boolean') patch.active = active
+
+      // CRM: só entra no patch o que veio no body; chave nova ou envio
+      // ligado testa a conexão (GET /eu e /unidades) antes de gravar
+      if (crmApiKey !== undefined || crmEnabled !== undefined) {
+        const { data: current } = await db.from('clinics').select('*').eq('id', id).maybeSingle()
+        if (!current) return res.status(404).json({ error: 'Clínica não encontrada.' })
+        const crm = await crmClinicPatch({ crmEnabled, crmApiKey }, current, (apiKey) =>
+          checkCrmConnection(crmClient({ baseUrl: process.env.CRM_API_URL, apiKey, companyId: current.helena_account_id })))
+        if (crm.error) return res.status(400).json({ error: crm.error })
+        Object.assign(patch, crm.patch)
+      }
 
       if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: 'Nenhum campo para atualizar.' })
