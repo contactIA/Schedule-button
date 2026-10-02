@@ -1,1 +1,107 @@
-/* Estilos Globais movidos para App.css */
+/*
+  Tokens do botão, com os valores do CRM ContactIA (design "CRM Kanban",
+  2026-09-29), para o botão ter a mesma cara do CRM dentro do atendimento.
+  Tema claro só, como no CRM: dentro do iframe não dá para saber o tema do host.
+
+  A marca são as linhas --marca-* (o degradê dos botões principais) e --acento-*
+  (o roxo do que está ativo). As cores de situação (ok, atenção, alerta) ficam
+  separadas da marca e não mudam com ela.
+*/
+:root {
+  --marca-1: #4c0c94;
+  --marca-2: #9e1b57;
+  --marca-3: #e8341a;
+  --acento: #4a0e8a;
+  --acento-forte: #5a14a3;
+  --acento-suave: #f5edfb;
+  --acento-borda: #d4b6ee;
+  --acento-anel: rgb(74 14 138 / 0.15);
+
+  --fundo: #f4f5f8;
+  --superficie: #ffffff;
+  --afundado: #f4f5f8;
+  --afundado-2: #ebedf1;
+  --campo: #fafafb;
+  --painel: #f7f8fa;
+  --linha: #e6e8ec;
+  --linha-suave: #eaecf0;
+  --linha-fina: #f0f1f4;
+  --linha-forte: #d0d5dd;
+  --tinta: #101828;
+  --tinta-2: #344054;
+  --tinta-3: #475467;
+  --apagado: #667085;
+  --apagado-2: #98a2b3;
+
+  --ok: #067647;
+  --ok-forte: #079455;
+  --ok-suave: #ecfdf3;
+  --ok-borda: #abefc6;
+  --atencao: #b54708;
+  --atencao-forte: #f5a524;
+  --atencao-suave: #fff6e5;
+  --atencao-borda: #fedf89;
+  --alerta: #b42318;
+  --alerta-forte: #d92d20;
+  --alerta-suave: #fef3f2;
+  --alerta-borda: #fecdca;
+
+  --barra-de-rolagem: #d5d9e0;
+  --sombra-cartao: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --sombra-indicador: 0 1px 2px rgb(16 24 40 / 0.1), 0 0 0 1px rgb(16 24 40 / 0.03);
+
+  /* Cantos: 10px nos controles, 14px nos cartões, 8px nos chips e dias. */
+  --raio: 10px;
+  --raio-cartao: 14px;
+  --raio-chip: 8px;
+
+  --fonte: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fonte-dados: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Os nomes antigos do app, ligados aos tokens acima. */
+  --brand: linear-gradient(95deg, var(--marca-1) 0%, var(--marca-2) 55%, var(--marca-3) 100%);
+  --brand-solid: var(--acento-forte);
+  --brand-light: var(--acento-suave);
+  --brand-text: var(--acento);
+  --brand-border: var(--acento-anel);
+}
+
+body {
+  font-family: var(--fonte);
+  background: var(--fundo);
+  color: var(--tinta);
+  -webkit-font-smoothing: antialiased;
+}
+
+input, select, textarea, button { font-family: inherit; }
+
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+/* O degradê da marca, e o botão principal feito dele (o mesmo do CRM). */
+.fundo-marca {
+  background-image: var(--brand);
+}
+.botao-marca {
+  background-image: var(--brand);
+  color: #fff;
+  box-shadow: 0 4px 12px -4px rgb(158 27 87 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.18);
+  transition: box-shadow 150ms, filter 150ms;
+}
+.botao-marca:hover:not(:disabled) {
+  box-shadow: 0 6px 16px -4px rgb(158 27 87 / 0.55);
+  filter: brightness(1.08);
+}
+
+/* A barra de rolagem fina do CRM. */
+* { scrollbar-width: thin; scrollbar-color: var(--barra-de-rolagem) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--barra-de-rolagem); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

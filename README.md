@@ -64,17 +64,19 @@ Sem TypeScript — projeto em JavaScript puro.
 
 ## Identidade visual
 
-O gradiente roxo→vermelho da marca é aplicado em todo o app (botões primários, chips selecionados, cabeçalhos). Os tokens vivem no `:root` de `src/App.css` e `src/pages/Setup.css`:
+O botão segue o sistema visual do CRM ContactIA, para parecer parte dele dentro do atendimento. Os tokens vivem no `:root` de `src/index.css`, com os valores do CRM (`src/app/globals.css` do repo do CRM); `App.css` e `Setup.css` só usam as variáveis.
 
 | Token | Valor | Uso |
 |---|---|---|
-| `--brand` | `linear-gradient(135deg, #7C3AED 0%, #C026D3 50%, #DC2626 100%)` | Fundos de destaque (botões, chips ativos, headers) |
-| `--brand-solid` | `#9333EA` | Bordas e estados de foco/hover |
-| `--brand-light` | `#faf5ff` | Fundo suave em hover |
-| `--brand-text` | `#7C3AED` | Textos com cor da marca |
-| `--brand-border` | `rgba(147, 51, 234, 0.3)` | Anel de foco em inputs/selects |
+| `--marca-1/2/3` (e `--brand`) | `#4c0c94`, `#9e1b57`, `#e8341a` em degradê de 95deg | Botão principal e selo da marca |
+| `--acento`, `--acento-forte` | `#4a0e8a`, `#5a14a3` | O que está ativo: dia, horário, chip, interruptor |
+| `--acento-suave`, `--acento-borda`, `--acento-anel` | `#f5edfb`, `#d4b6ee`, roxo a 15% | Hover, bordas e anel de foco |
+| `--fundo`, `--superficie`, `--campo`, `--painel` | `#f4f5f8`, `#fff`, `#fafafb`, `#f7f8fa` | Fundo da tela, cartões, campos e blocos |
+| `--linha*`, `--tinta*`, `--apagado*` | cinzas do CRM | Bordas e textos |
+| `--ok*`, `--atencao*`, `--alerta*` | verde, âmbar e vermelho do CRM | Situação (sucesso, aviso, erro), separada da marca |
+| `--raio`, `--raio-cartao`, `--raio-chip` | 10px, 14px, 8px | Controles, cartões, chips e dias |
 
-Cores de apoio: cinzas do Tailwind (`#e2e8f0` bordas, `#94a3b8`/`#475569` textos secundários), verde `#16a34a` (sucesso/visível), vermelho `#dc2626` (erros e ações destrutivas).
+Letra: Geist e Geist Mono (rótulos de seção), pelos pacotes `@fontsource-variable/geist` e `@fontsource-variable/geist-mono`, que vêm no build (nenhum pedido a outro servidor ao abrir o iframe). Tema claro só, como no CRM. As classes `.botao-marca` e `.fundo-marca` são as mesmas do CRM.
 
 ---
 
