@@ -1,5 +1,5 @@
--- Espelho dos cards no CRM ContactIA (issue #91 do CRM). NÃO aplicada:
--- aplicar no projeto Schedule-button-v2 só com OK da equipe.
+-- Espelho dos cards no CRM ContactIA (issue #91 do CRM). Aplicada no projeto
+-- Schedule-button-v2 em 2026-10-02, pelo MCP (nome crm_integration).
 --
 -- Tudo é configurado no Setup do botão (Editar clínica / unidade):
 -- clinics.crm_enabled: "Enviar ao CRM", liga o espelho por clínica
