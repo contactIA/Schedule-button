@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { crmClient, syncAppointment, CrmError } from './_crm.js'
+import { crmClient, syncAppointment, CrmError, checkCrmConnection, crmClinicPatch } from './_crm.js'
 
 // Dublê da API do CRM: registra as chamadas e responde por rota.
 function fakeCall(routes) {
@@ -85,4 +85,68 @@ test('cliente: manda chave e clínica e traduz o erro { erro, codigo }', async (
   assert.equal(seen.url, 'https://crm.test/api/v1/cards')
   assert.equal(seen.opts.headers.Authorization, 'Bearer crm_x')
   assert.equal(seen.opts.headers['X-Clinica'], 'acc1')
+})
+
+// ── Setup: teste de conexão e troca da chave ─────────────────────
+
+const me = (over = {}) => ({ podeEscrever: true, paineis: ['crc1', 'crc2'], clinica: { nome: 'Prev Odonto' }, ...over })
+
+test('teste de conexão: devolve a clínica e as unidades do CRM', async () => {
+  const { call } = fakeCall({
+    'GET /eu': me(),
+    'GET /unidades': { unidades: [{ id: 'u1', nome: 'Centro', ativa: true }, { id: 'u2', nome: 'Sul', ativa: false }] },
+  })
+  assert.deepEqual(await checkCrmConnection(call), {
+    clinicName: 'Prev Odonto',
+    units: [{ id: 'u1', name: 'Centro', active: true }, { id: 'u2', name: 'Sul', active: false }],
+  })
+})
+
+test('teste de conexão: chave só de leitura é recusada', async () => {
+  const { call } = fakeCall({ 'GET /eu': me({ podeEscrever: false }), 'GET /unidades': { unidades: [] } })
+  await assert.rejects(checkCrmConnection(call), { code: 'CHAVE_SO_LEITURA' })
+})
+
+const current = { helena_account_id: 'acc1', crm_enabled: false, crm_api_key: null }
+const okTest = () => { const keys = []; return { keys, test: async (k) => { keys.push(k) } } }
+
+test('chave nova: testa a conexão com ela e grava', async () => {
+  const t = okTest()
+  const r = await crmClinicPatch({ crmApiKey: '  crm_nova  ' }, { ...current, crm_api_key: 'crm_velha' }, t.test)
+  assert.deepEqual(r, { patch: { crm_api_key: 'crm_nova' } })
+  assert.deepEqual(t.keys, ['crm_nova'])
+})
+
+test('chave recusada pelo CRM: não grava e explica o motivo', async () => {
+  const refuse = async () => { throw new CrmError('Chave da API inválida ou revogada', 401, 'CHAVE_INVALIDA') }
+  const r = await crmClinicPatch({ crmApiKey: 'crm_errada', crmEnabled: true }, current, refuse)
+  assert.equal(r.patch, undefined)
+  assert.match(r.error, /recusou a chave/)
+})
+
+test('chave de outra clínica: o erro cita o idconta', async () => {
+  const refuse = async () => { throw new CrmError('x', 403, 'CLINICA_FORA_DA_CHAVE') }
+  const r = await crmClinicPatch({ crmApiKey: 'crm_x' }, current, refuse)
+  assert.match(r.error, /idconta acc1/)
+})
+
+test('ligar o envio sem chave nenhuma é recusado', async () => {
+  const t = okTest()
+  const r = await crmClinicPatch({ crmEnabled: true }, current, t.test)
+  assert.match(r.error, /preencha a chave/)
+  assert.equal(t.keys.length, 0)
+})
+
+test('ligar o envio com a chave salva testa a chave salva', async () => {
+  const t = okTest()
+  const r = await crmClinicPatch({ crmEnabled: true }, { ...current, crm_api_key: 'crm_salva' }, t.test)
+  assert.deepEqual(r, { patch: { crm_enabled: true } })
+  assert.deepEqual(t.keys, ['crm_salva'])
+})
+
+test('desligar o envio não chama o CRM; campo vazio mantém a chave', async () => {
+  const t = okTest()
+  const r = await crmClinicPatch({ crmEnabled: false, crmApiKey: '   ' }, { ...current, crm_enabled: true, crm_api_key: 'crm_salva' }, t.test)
+  assert.deepEqual(r, { patch: { crm_enabled: false } })
+  assert.equal(t.keys.length, 0)
 })

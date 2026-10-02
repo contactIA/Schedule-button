@@ -2,8 +2,8 @@ import { getClinicByAccountId } from './_supabase.js'
 import { crmClient, syncAppointment } from './_crm.js'
 
 // Espelho do card no CRM ContactIA (runtime, fire-and-forget). Desligado por
-// padrão: só age na clínica com clinics.crm_enabled = true. É informativo para
-// o operador — sempre responde 2xx e o erro fica no log da função.
+// padrão: só age na clínica com clinics.crm_enabled = true, ligado no Setup.
+// É informativo para o operador: sempre responde 2xx e o erro fica no log.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -15,9 +15,10 @@ export default async function handler(req, res) {
     const clinic = await getClinicByAccountId(idconta)
     if (!clinic?.crm_enabled) return res.status(200).json({ status: 'disabled' })
 
-    const apiKey = process.env.CRM_API_KEY
+    // Chave por clínica, gravada no Setup (write-only, como o token Helena)
+    const apiKey = clinic.crm_api_key
     if (!apiKey) {
-      console.error('[crm] CRM_API_KEY ausente — clínica com crm_enabled não sincronizou:', idconta)
+      console.error('[crm] clínica com crm_enabled sem chave do CRM, não sincronizou:', idconta)
       return res.status(200).json({ status: 'not_configured' })
     }
 
