@@ -4,6 +4,7 @@ import {
   updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
 import { fetchClinicorpSlots, fetchClinicorpDays, fetchClinicorpHistory, scheduleClinicorp } from './services/clinicorp'
+import { syncCrmCard } from './services/crm'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
 import TagChips from './components/TagChips'
@@ -410,6 +411,18 @@ function App() {
       } else {
         await createCard(effectiveAgendadoStepId, activePanel?.id ?? clinicConfig.panelId, nome.trim(), finalDescription, activeContactId, idconta, cardCustomFields, pickedTags)
       }
+
+      // Espelho no CRM ContactIA, depois do painel nativo gravado. Desligado
+      // por clínica no servidor; nunca bloqueia nem desfaz o fluxo.
+      syncCrmCard({
+        idconta,
+        unitId:       activeUnit?.id ?? null,
+        phone:        telefone,
+        name:         nome.trim(),
+        contactId:    activeContactId ?? null,
+        scheduledFor: selectedDate && selectedSlot ? toBrasiliaIso(selectedDate, selectedSlot.from) : null,
+        note:         [finalDescription, authorLine].filter(Boolean).join('\n\n'),
+      })
 
       let clinicorpStatus = null
       if (selectedDate && selectedSlot) {

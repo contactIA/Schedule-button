@@ -44,6 +44,7 @@ Etapa 2 — Calendário
 2. Etiquetas selecionadas são **mescladas** com as que o card já tem — nada é removido
 3. Se houver slot: busca paciente no Clinicorp pelo telefone → cria se não existir → cria o agendamento (sem categoria/cor — `CategoryDescription` não é confiável em todas as contas Clinicorp, ver débitos técnicos)
 4. Com o Clinicorp confirmado e o lembrete ativado na clínica: agenda mensagem de template por WhatsApp via app "Mensagens agendadas" do Helena — na véspera às HH:MM, X horas antes ou logo após o agendamento. **Falha no lembrete nunca desfaz card/agendamento** (aviso amarelo ao operador)
+5. Nas clínicas com `clinics.crm_enabled`: espelha o card no CRM ContactIA (cria pelo telefone e move para Agendados). Falha no CRM nunca afeta o painel nativo nem o agendamento (ver `CLAUDE.md`)
 
 ---
 

@@ -5,7 +5,8 @@
     "api/setup.js":    { "maxDuration": 30 },
     "api/clinic.js":         { "maxDuration": 10 },
     "api/clinics.js":        { "maxDuration": 10 },
-    "api/helena-preview.js": { "maxDuration": 10 }
+    "api/helena-preview.js": { "maxDuration": 10 },
+    "api/crm.js":            { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/setup", "destination": "/index.html" }
