@@ -26,7 +26,8 @@ export function crmClient({ baseUrl, apiKey, companyId, fetchImpl = fetch }) {
       method,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'X-Clinica':     companyId,
+        // Sem idconta, vale a clínica única da chave
+        ...(companyId ? { 'X-Clinica': String(companyId) } : {}),
         'Content-Type':  'application/json',
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
