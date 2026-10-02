@@ -714,12 +714,12 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
           </div>
 
           <div className="admin-field">
-            <label>Subscriber ID <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+            <label>Subscriber ID <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
             <input type="text" value={subscriberId} onChange={e => setSubscriberId(e.target.value.trim())} />
           </div>
 
           <div className="admin-field">
-            <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+            <label>Code Link <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
             <input type="text" value={codeLink}
               onChange={e => setCodeLink(e.target.value.trim())}
               placeholder="Buscado automaticamente" />
@@ -993,7 +993,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
       <div className="admin-wrap">
         <div className="admin-card">
           <div className="edit-loading">
-            <span className="admin-spinner" style={{ borderTopColor: '#475569' }} />
+            <span className="admin-spinner" style={{ borderTopColor: 'var(--acento-forte)' }} />
             Carregando clínica...
           </div>
         </div>
@@ -1077,7 +1077,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
               o agendamento. Salvo junto com "Salvar alterações".
             </span>
             {crmEnabled && (
-              <span className="admin-field-hint" style={{ color: '#b45309' }}>
+              <span className="admin-field-hint" style={{ color: 'var(--atencao)' }}>
                 <strong>Atenção:</strong> deixe desligado o lembrete de Agendados no CRM desta clínica,
                 para o paciente não receber dois lembretes.
               </span>
@@ -1159,7 +1159,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
               onToggleTag={(panelId, tagId) => setPickedPanels(prev => toggleTagIn(prev, panelId, tagId))}
             />
             {pickedPanels.length === 0 && (
-              <span className="admin-field-hint" style={{ color: '#dc2626' }}>
+              <span className="admin-field-hint" style={{ color: 'var(--alerta)' }}>
                 Selecione pelo menos um painel.
               </span>
             )}
@@ -1439,7 +1439,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                 onClick={handleVerifyHelena}
               >
                 {stepsLoading
-                  ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'#475569'}} />Buscando etapas...</span>
+                  ? <span className="admin-btn-loading"><span className="admin-spinner" style={{borderTopColor:'var(--acento-forte)'}} />Buscando etapas...</span>
                   : helenaPanels.length > 0
                     ? '✓ Painéis carregados — clique para recarregar'
                     : '🔍 Verificar token e carregar painéis'}
@@ -1447,7 +1447,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
               {!helenaToken.trim() && (
                 <span className="admin-field-hint">Preencha o token acima para habilitar.</span>
               )}
-              {stepsError && <span className="admin-field-hint" style={{color:'#dc2626'}}>⚠ {stepsError}</span>}
+              {stepsError && <span className="admin-field-hint" style={{color:'var(--alerta)'}}>⚠ {stepsError}</span>}
             </div>
 
             {/* Lista de painéis disponíveis para seleção */}
@@ -1462,7 +1462,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                   onToggleTag={(panelId, tagId) => setPickedPanels(prev => toggleTagIn(prev, panelId, tagId))}
                 />
                 {pickedPanels.length === 0 && (
-                  <span className="admin-field-hint" style={{color:'#dc2626'}}>
+                  <span className="admin-field-hint" style={{color:'var(--alerta)'}}>
                     Selecione pelo menos um painel.
                   </span>
                 )}
@@ -1546,7 +1546,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                       </div>
 
                       <div className="admin-field">
-                        <label>Code Link <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                        <label>Code Link <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
                         <input type="text" value={unit.codeLink}
                           onChange={e => updateUnit(i, 'codeLink', e.target.value.trim())}
                           placeholder="Ex: 75094" />
@@ -1554,7 +1554,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                       </div>
 
                       <div className="admin-field">
-                        <label>Subscriber ID <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                        <label>Subscriber ID <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
                         <input type="text" value={unit.subscriberId}
                           onChange={e => updateUnit(i, 'subscriberId', e.target.value.trim())} />
                       </div>
@@ -1562,7 +1562,7 @@ function AdminForm({ adminKey, onSuccess, onBack }) {
                       {/* Painel Helena próprio (opcional) */}
                       {helenaPanels.length > 0 && (
                         <div className="admin-field">
-                          <label>Painel Helena <span style={{fontWeight:400,color:'#94a3b8'}}>(opcional)</span></label>
+                          <label>Painel Helena <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
                           <select
                             value={unit.helenaPanelId}
                             onChange={e => {
