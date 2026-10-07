@@ -32,7 +32,7 @@ src/services/     → Chamadas a APIs externas (helena.js, clinicorp.js)
 src/utils/        → Helpers puros (date.js)
 api/clinic.js     → Config pública da clínica por ?idconta= (runtime do botão)
 api/clinicorp.js  → Slots, dias disponíveis, histórico e criação de agendamento
-api/proxy.js      → Proxy das chamadas à API Helena (resolve CORS + injeta token)
+api/proxy.js      → Proxy das chamadas à API Helena (lista de caminhos, resolve CORS + injeta token)
 api/setup.js      → Cadastro de clínica (admin)
 api/clinics.js    → Lista/detalhe/edição de clínicas, sync de profissionais (admin)
 api/units.js      → Criação/edição/ativação de unidades (admin)
@@ -44,9 +44,13 @@ api/crm-preview.js → Unidades do CRM da clínica para o seletor do Setup (admi
 api/_supabase.js  → Cliente Supabase + queries compartilhadas (não vira função)
 api/_clinicorp.js → fetchBusinessId/fetchProfessionals compartilhados
 api/_auth.js      → requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
+api/_origin.js    → requireAllowedOrigin (prova de origem das rotas do operador, sem senha)
+api/_scheduled-message.js → normalizeScheduledMessage (clinic.js e proxy.js)
 ```
 
 O frontend nunca chama Clinicorp/Helena diretamente — sempre via `api/`. Tokens (Helena e Clinicorp) são write-only nas rotas admin: entram via POST/PUT mas nunca voltam em GET.
+
+Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `proxy`, `clinicorp`, `crm` e `reminder-log` chamam `requireAllowedOrigin` primeiro (Origin ou Referer do próprio host ou de `EMBED_HOSTS`, senão 403). Rota nova que o front chama sem senha faz o mesmo. O proxy só repassa os caminhos e métodos da lista `ROUTES` em `api/proxy.js`: chamada nova à plataforma no front entra na lista, e o teste de contrato (`api/_proxy.test.js`, que roda `src/services/helena.js`) falha se faltar. Teste de função fica em `api/_*.test.js` (com `_`, para a Vercel não publicar como rota).
 
 ---
 
@@ -61,6 +65,7 @@ O frontend nunca chama Clinicorp/Helena diretamente — sempre via `api/`. Token
 | Chave da API do CRM ContactIA | Supabase `clinics.crm_api_key` (write-only no Setup, como o token Helena) |
 | Espelho no CRM por clínica/unidade | Supabase `clinics.crm_enabled`, `units.crm_unit_id` (Setup) |
 | Endereço da API do CRM | env var `CRM_API_URL` (opcional; padrão `https://crm.contactia.com.br/api/v1`) |
+| Hosts aceitos além do próprio app | env var `EMBED_HOSTS` (opcional, vírgula; vazio = só o próprio app) |
 
 A clínica é identificada por `?idconta=` (companyId da conta Helena → `clinics.helena_account_id`).
 

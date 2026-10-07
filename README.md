@@ -111,6 +111,24 @@ Frontend (browser)
 
 As variáveis de ambiente na Vercel são `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` e `ADMIN_PASSWORD` — esta última validada **no servidor** (header `x-admin-key`, fail-closed) em todas as rotas admin. Tokens Helena/Clinicorp são write-only nas rotas admin: entram via POST/PUT, nunca voltam em GET.
 
+### Rotas do operador (sem senha)
+
+O `idconta` da URL não é segredo: aparece no item de menu de cada clínica. Por isso as rotas que o botão chama sem senha se protegem de dois jeitos:
+
+1. **Prova de origem** (`api/_origin.js`), em `/api/clinic`, `/api/proxy`, `/api/clinicorp`, `/api/crm` e `/api/reminder-log`. O pedido só passa quando o `Origin` (ou, no GET, o `Referer`) é:
+   - do próprio app: o host que serviu o pedido, seja o domínio da Vercel, seja um domínio próprio, sem configurar nada (o front chama `/api/*` do mesmo endereço);
+   - ou de um host da variável `EMBED_HOSTS` (o host da plataforma onde o botão abre), com os subdomínios.
+
+   Sem `Origin` nem `Referer`, só passa o pedido que o navegador marca com `Sec-Fetch-Site: same-origin`. O resto volta `403 { error: 'origin_not_allowed' }`, antes de ir ao banco. É barreira contra outro site usar o navegador do operador, não garantia: quem monta o pedido à mão forja esses cabeçalhos. O `/setup` e as rotas admin não mudam (senha).
+2. **Lista de caminhos no proxy** (`api/proxy.js`): só os caminhos e métodos da tabela em "Endpoints consumidos", abaixo, com os ids conferidos (sem `.`, `/` ou `%`) e a query remontada. O resto volta `403 { error: 'path_not_allowed' }`. Além disso:
+   - a busca de card exige `ContactId` e `PageSize=1`, `PageNumber=1` (não lista o painel);
+   - mover card (`PUT`) só aceita `fields` entre `stepId`, `customFields` e `tagIds`;
+   - o lembrete só sai com um modelo ativo do Setup, pelo canal configurado nele (`403 { error: 'body_not_allowed' }` no resto).
+
+   Chamada nova à plataforma no front entra na lista e no teste de contrato (`api/_proxy.test.js`, que roda as funções de `src/services/helena.js`).
+
+O `/api/clinic` devolve só a config da tela (nome, painéis, etapas, etiquetas, unidades, lembrete), sem token nem credencial; `api/_clinic.test.js` confere.
+
 ### Schema do banco (Supabase)
 
 ```sql
@@ -229,8 +247,10 @@ api/
   _supabase.js        — Client Supabase + queries de clínica/unidade
   _auth.js            — requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
   _clinicorp.js       — fetchBusinessId/fetchProfessionals compartilhados
+  _origin.js          — requireAllowedOrigin (prova de origem das rotas sem senha)
+  _scheduled-message.js — normalizeScheduledMessage (clinic.js e proxy.js)
   clinic.js           — Config pública da clínica por idconta (sem tokens)
-  proxy.js            — Proxy Helena (injeta token da clínica, resolve CORS)
+  proxy.js            — Proxy Helena (lista de caminhos, injeta token da clínica, resolve CORS)
   clinicorp.js        — Slots, dias disponíveis, histórico do paciente e agendamento
   setup.js            — Cadastro de clínica + unidades (auto-fetch de IDs)
   clinics.js          — Lista/detalhe/edição de clínicas + sync de profissionais (admin)
@@ -251,16 +271,18 @@ Docs/
 ### API WTS.chat (Helena CRM) — via `/api/proxy`
 Base URL: `https://api.wts.chat`
 
+O proxy só aceita estes caminhos e métodos (lista em `api/proxy.js`); qualquer outro volta 403.
+
 | Método | Endpoint | Finalidade |
 |---|---|---|
 | GET | `/core/v1/contact/{id}` | Nome e telefone do contato |
 | GET | `/core/v1/contact/phonenumber/{phone}` | Busca manual de contato por telefone |
-| GET | `/crm/v1/panel/card?ContactId=...` | Verifica se já existe card |
-| GET | `/crm/v2/panel?IncludeDetails=Steps,Tags` | Etapas e etiquetas do painel |
+| GET | `/crm/v1/panel/card?PanelId=...&ContactId=...&PageSize=1&PageNumber=1` | Verifica se já existe card |
+| GET | `/crm/v2/panel?PageSize=100&IncludeDetails=Steps&IncludeDetails=Tags` | Etapas e etiquetas do painel |
 | POST | `/crm/v1/panel/card` | Cria card (com `tagIds`) |
-| PUT | `/crm/v2/panel/card/{id}` | Move card de etapa + atualiza `tagIds` |
+| PUT | `/crm/v2/panel/card/{id}` | Move card de etapa + atualiza `tagIds` (só `stepId`, `customFields`, `tagIds`) |
 | POST | `/crm/v1/panel/card/{id}/note` | Adiciona anotação ao card |
-| POST | `/chat/v1/scheduled-message` | Agenda o lembrete de WhatsApp |
+| POST | `/chat/v1/scheduled-message` | Agenda o lembrete de WhatsApp (só modelo e canal do Setup) |
 
 ### API Clinicorp — via `/api/clinicorp`
 Base URL: `https://api.clinicorp.com/rest/v1`
@@ -296,6 +318,8 @@ SUPABASE_SERVICE_KEY=...
 ADMIN_PASSWORD=...
 ```
 
+`EMBED_HOSTS` não faz falta no local: o `vercel dev` serve tela e funções no mesmo endereço, e o próprio host é aceito.
+
 Teste com clínica e contato reais:
 
 ```
@@ -306,6 +330,7 @@ Sem `contactId`, o passo 1 mostra a busca manual de contato por telefone — dá
 
 ```bash
 npm run lint    # ESLint (zero problemas)
+npm test        # testes das funções (api/*.test.js)
 npm run build   # build de produção
 ```
 
@@ -319,6 +344,8 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 - Rewrite de `/setup` → SPA configurado em `vercel.json`
 - Variáveis de ambiente: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`
   (`VITE_ADMIN_PASSWORD` é obsoleta e pode ser removida do dashboard)
+- Opcionais: `CRM_API_URL` e `EMBED_HOSTS` (hosts aceitos além do próprio app, separados
+  por vírgula, ex. `app.fluxodonto.com`; vazio = só o próprio app, que é o que o botão usa)
 
 ---
 
@@ -329,6 +356,12 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 ---
 
 ## Changelog
+
+### 2026-10-07 — Rotas do operador fechadas
+
+- **Proxy com lista de caminhos**: só os caminhos e métodos que o botão usa, com ids e query conferidos e o caminho remontado
+- **Prova de origem** em `/api/clinic`, `/api/proxy`, `/api/clinicorp`, `/api/crm` e `/api/reminder-log` (variável opcional `EMBED_HOSTS`)
+- Teste de que o `/api/clinic` não devolve token nem credencial
 
 ### 2026-06-11 — Roadmap v1 concluído
 
