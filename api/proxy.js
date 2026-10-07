@@ -10,11 +10,27 @@ const ID = '[A-Za-z0-9_-]{1,64}'
 const ID_RE = new RegExp(`^${ID}$`)
 
 const CARD_UPDATE_FIELDS = ['stepId', 'customFields', 'tagIds']
+const REMINDER_KEYS = ['from', 'to', 'type', 'templateId', 'templateParams', 'scheduling']
+
+// Corpo só com as chaves que o front manda, na grafia exata. A plataforma pode
+// ler as chaves sem diferenciar maiúsculas: um "Fields" ou "TemplateId" ao lado
+// do conferido passaria por fora da regra.
+function hasOnlyKeys(body, keys) {
+  return body !== null && typeof body === 'object' && !Array.isArray(body) &&
+    Object.keys(body).every(k => keys.includes(k))
+}
+
+function isCardUpdate(body) {
+  return hasOnlyKeys(body, ['fields', ...CARD_UPDATE_FIELDS]) &&
+    Array.isArray(body.fields) && body.fields.length > 0 &&
+    body.fields.every(f => CARD_UPDATE_FIELDS.includes(f))
+}
 
 // O lembrete só sai com um modelo configurado no Setup, pelo canal dele: o
 // proxy não manda texto livre nem outro modelo.
 function isConfiguredReminder(body, clinic) {
-  if (body?.type !== 'TEMPLATE' || !body.templateId) return false
+  if (!hasOnlyKeys(body, REMINDER_KEYS)) return false
+  if (body.type !== 'TEMPLATE' || !body.templateId) return false
   const messages = normalizeScheduledMessage(clinic.scheduled_message)?.messages ?? []
   return messages.some(m => m.templateId === body.templateId && (m.channelFrom || null) === (body.from || null))
 }
@@ -42,7 +58,7 @@ const ROUTES = [
   // Move o card: só etapa, campos personalizados e etiquetas
   {
     method: 'PUT', path: new RegExp(`^/crm/v2/panel/card/${ID}$`),
-    body: b => Array.isArray(b?.fields) && b.fields.every(f => CARD_UPDATE_FIELDS.includes(f)),
+    body: isCardUpdate,
   },
   // Anotação no card
   { method: 'POST', path: new RegExp(`^/crm/v1/panel/card/${ID}/note$`) },
@@ -104,7 +120,8 @@ export function makeProxyHandler({ loadClinic = getClinicByAccountId, fetchImpl 
     const clinic = await loadClinic(idconta)
     if (!clinic) return res.status(404).json({ error: 'not_registered' })
 
-    if (match.route.body && !match.route.body(parseBody(req.body), clinic)) {
+    const checked = match.route.body ? parseBody(req.body) : undefined
+    if (match.route.body && !match.route.body(checked, clinic)) {
       console.warn(`[proxy] corpo fora da regra: ${req.method} ${match.path} | conta: ${idconta}`)
       return res.status(403).json({ error: 'body_not_allowed' })
     }
@@ -112,7 +129,11 @@ export function makeProxyHandler({ loadClinic = getClinicByAccountId, fetchImpl 
     const fetchUrl = `${BASE}${match.path}`
 
     let bodyStr
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    if (checked !== undefined) {
+      // Vai o corpo que foi conferido, não o texto recebido: chave repetida no
+      // texto não chega à plataforma.
+      bodyStr = JSON.stringify(checked)
+    } else if (req.method !== 'GET' && req.method !== 'HEAD') {
       if (req.body !== undefined && req.body !== null) {
         bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
       }

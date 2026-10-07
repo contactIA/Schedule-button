@@ -163,6 +163,11 @@ test('mover card: recusa mexer em outro campo que não etapa, campos personaliza
     { fields: ['title'], title: 'x' },
     { fields: ['stepId', 'contactIds'], stepId: ETAPA, contactIds: [] },
     { stepId: ETAPA },
+    { fields: [], title: 'x' },
+    // Chave fora das que o front manda, ou a mesma com outra grafia
+    { fields: ['stepId'], stepId: ETAPA, title: 'x' },
+    { fields: ['stepId'], stepId: ETAPA, Fields: ['title'], title: 'x' },
+    [{ fields: ['stepId'] }],
     undefined,
   ]) {
     const res = await send(h, 'PUT', path, body)
@@ -175,6 +180,15 @@ test('mover card: recusa mexer em outro campo que não etapa, campos personaliza
   assert.equal(h.forwarded.length, 1)
 })
 
+test('mover card: vai à plataforma o corpo conferido, não o texto recebido', async () => {
+  const h = harness()
+  const texto = `{"fields":["title"],"fields":["stepId"],"stepId":"${ETAPA}"}`
+  const res = await send(h, 'PUT', `/crm/v2/panel/card/${CARD}`, texto)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(h.forwarded[0].body), { fields: ['stepId'], stepId: ETAPA })
+  assert.equal(h.forwarded[0].body.includes('title'), false)
+})
+
 test('lembrete: só um modelo do Setup, pelo canal dele', async () => {
   const h = harness()
   const path = '/chat/v1/scheduled-message'
@@ -185,6 +199,11 @@ test('lembrete: só um modelo do Setup, pelo canal dele', async () => {
     { ...base, from: undefined },
     { ...base, type: 'TEXT', text: 'promoção' },
     { from: 'canal-1', to: '5562999990000', type: 'TEXT', text: 'oi' },
+    // A mesma chave com outra grafia, ou chave que o front não manda
+    { ...base, TemplateId: 'tpl-outro' },
+    { ...base, Type: 'CHATBOT' },
+    { ...base, From: 'canal-2' },
+    { ...base, botId: 'bot-1' },
     undefined,
   ]) {
     const res = await send(h, 'POST', path, body)
