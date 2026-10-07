@@ -1,94 +1,83 @@
 import { getClinicByAccountId } from './_supabase.js'
+import { requireAllowedOrigin } from './_origin.js'
+import { normalizeScheduledMessage } from './_scheduled-message.js'
 
-// Converte o scheduled_message do banco para o runtime: shape antigo
-// (mensagem única) vira lista; mensagens ocultas (active: false) saem.
-function normalizeScheduledMessage(sm) {
-  if (!sm?.enabled) return null
-  const raw = Array.isArray(sm.messages)
-    ? sm.messages
-    : [{ id: 'msg-legado', label: sm.templateName || 'Lembrete', ...sm }]
-  const messages = raw
-    .filter(m => m.active !== false && m.templateId)
-    .map(m => ({
-      id:          m.id,
-      label:       m.label || m.templateName || 'Lembrete',
-      channelFrom: m.channelFrom,
-      templateId:  m.templateId,
-      paramMap:    m.paramMap ?? {},
-      timing:      m.timing ?? null,
-    }))
-  return messages.length > 0 ? { enabled: true, messages } : null
-}
+// Config pública da clínica para o botão. Nenhum token nem credencial
+// (plataforma, Clinicorp, CRM) entra na resposta: _clinic.test.js confere.
+export function makeClinicHandler({ loadClinic = getClinicByAccountId } = {}) {
+  return async function handler(req, res) {
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+    if (!requireAllowedOrigin(req, res)) return
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+    const { idconta } = req.query ?? {}
+    if (!idconta) return res.status(400).json({ error: 'Parâmetro idconta obrigatório' })
 
-  const { idconta } = req.query
-  if (!idconta) return res.status(400).json({ error: 'Parâmetro idconta obrigatório' })
+    try {
+      const clinic = await loadClinic(idconta)
+      if (!clinic) return res.status(404).json({ error: 'not_registered' })
 
-  try {
-    const clinic = await getClinicByAccountId(idconta)
-    if (!clinic) return res.status(404).json({ error: 'not_registered' })
+      // Normaliza steps do banco: aceita tanto { name } quanto { title }
+      const normalizeSteps = (arr) => (arr ?? []).map(s => ({
+        id:   s.id,
+        name: s.name || s.title || s.id,
+      }))
 
-    // Normaliza steps do banco: aceita tanto { name } quanto { title }
-    const normalizeSteps = (arr) => (arr ?? []).map(s => ({
-      id:   s.id,
-      name: s.name || s.title || s.id,
-    }))
+      const clinicSteps = normalizeSteps(clinic.helena_steps)
 
-    const clinicSteps = normalizeSteps(clinic.helena_steps)
+      // Cada unidade resolve seus próprios panel/steps usando a clínica como fallback
+      const units = (clinic.units ?? []).map(unit => ({
+        id:             unit.id,
+        name:           unit.name,
+        position:       unit.position,
+        panelId:        unit.helena_panel_id         ?? clinic.helena_panel_id,
+        agendadoStepId: unit.helena_agendado_step_id ?? clinic.helena_agendado_step_id,
+        steps:          unit.helena_steps?.length
+                          ? normalizeSteps(unit.helena_steps)
+                          : clinicSteps,
+      }))
 
-    // Cada unidade resolve seus próprios panel/steps usando a clínica como fallback
-    const units = (clinic.units ?? []).map(unit => ({
-      id:             unit.id,
-      name:           unit.name,
-      position:       unit.position,
-      panelId:        unit.helena_panel_id         ?? clinic.helena_panel_id,
-      agendadoStepId: unit.helena_agendado_step_id ?? clinic.helena_agendado_step_id,
-      steps:          unit.helena_steps?.length
-                        ? normalizeSteps(unit.helena_steps)
-                        : clinicSteps,
-    }))
+      // Monta lista de painéis: usa helena_panels se configurado, senão cria um painel único com os dados legados
+      const panels = clinic.helena_panels?.length
+        ? clinic.helena_panels.map(p => ({
+            id:            p.id,
+            name:          p.name,
+            agendadoStepId: p.agendadoStepId,
+            // null = sem restrição (clínicas cadastradas antes do recurso)
+            allowedTagIds: Array.isArray(p.allowedTagIds) ? p.allowedTagIds : null,
+            // Chaves dos campos personalizados datetime do card (null = não mapeado)
+            agendadoEmFieldKey:   p.agendadoEmFieldKey   ?? null,
+            agendadoParaFieldKey: p.agendadoParaFieldKey ?? null,
+            // Steps vêm do banco clínica (todos os painéis compartilham os steps do painel principal por ora)
+            steps:         clinicSteps,
+          }))
+        : [{
+            id:            clinic.helena_panel_id,
+            name:          clinic.name,
+            agendadoStepId: clinic.helena_agendado_step_id,
+            allowedTagIds: null,
+            agendadoEmFieldKey:   null,
+            agendadoParaFieldKey: null,
+            steps:         clinicSteps,
+          }]
 
-    // Monta lista de painéis: usa helena_panels se configurado, senão cria um painel único com os dados legados
-    const panels = clinic.helena_panels?.length
-      ? clinic.helena_panels.map(p => ({
-          id:            p.id,
-          name:          p.name,
-          agendadoStepId: p.agendadoStepId,
-          // null = sem restrição (clínicas cadastradas antes do recurso)
-          allowedTagIds: Array.isArray(p.allowedTagIds) ? p.allowedTagIds : null,
-          // Chaves dos campos personalizados datetime do card (null = não mapeado)
-          agendadoEmFieldKey:   p.agendadoEmFieldKey   ?? null,
-          agendadoParaFieldKey: p.agendadoParaFieldKey ?? null,
-          // Steps vêm do banco clínica (todos os painéis compartilham os steps do painel principal por ora)
-          steps:         clinicSteps,
-        }))
-      : [{
-          id:            clinic.helena_panel_id,
-          name:          clinic.name,
-          agendadoStepId: clinic.helena_agendado_step_id,
-          allowedTagIds: null,
-          agendadoEmFieldKey:   null,
-          agendadoParaFieldKey: null,
-          steps:         clinicSteps,
-        }]
-
-    return res.status(200).json({
-      name:           clinic.name,
-      // Painel principal (compatibilidade)
-      panelId:        panels[0]?.id,
-      agendadoStepId: panels[0]?.agendadoStepId,
-      steps:          clinicSteps,
-      tags:           clinic.helena_tags  ?? [],
-      // Config do lembrete — só vai ao runtime quando ativado, sempre no
-      // shape de lista e só com as mensagens visíveis para o operador
-      scheduledMessage: normalizeScheduledMessage(clinic.scheduled_message),
-      panels,
-      units,
-    })
-  } catch (err) {
-    console.error('[clinic] Erro:', err.message)
-    return res.status(500).json({ error: err.message })
+      return res.status(200).json({
+        name:           clinic.name,
+        // Painel principal (compatibilidade)
+        panelId:        panels[0]?.id,
+        agendadoStepId: panels[0]?.agendadoStepId,
+        steps:          clinicSteps,
+        tags:           clinic.helena_tags  ?? [],
+        // Config do lembrete — só vai ao runtime quando ativado, sempre no
+        // shape de lista e só com as mensagens visíveis para o operador
+        scheduledMessage: normalizeScheduledMessage(clinic.scheduled_message),
+        panels,
+        units,
+      })
+    } catch (err) {
+      console.error('[clinic] Erro:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
   }
 }
+
+export default makeClinicHandler()
