@@ -5,7 +5,7 @@ import clinicorpHandler from './clinicorp.js'
 import crmHandler from './crm.js'
 import reminderLogHandler from './reminder-log.js'
 
-delete process.env.EMBED_HOSTS
+for (const k of ['EMBED_HOSTS', 'VERCEL_URL', 'VERCEL_BRANCH_URL', 'VERCEL_PROJECT_PRODUCTION_URL']) delete process.env[k]
 
 const APP = 'schedule-button-xi.vercel.app'
 const PLATAFORMA = ['app.fluxodonto.com']
@@ -35,6 +35,20 @@ test('aceita o próprio app: Origin do POST, Referer do GET, Sec-Fetch-Site sem 
   // Desenvolvimento local: a porta faz parte do host
   assert.equal(isAllowedOrigin({ host: 'localhost:3000', origin: 'http://localhost:3000' }, []), true)
   assert.equal(isAllowedOrigin({ host: 'localhost:3000', origin: 'http://localhost:5175' }, []), false)
+})
+
+test('aceita os endereços que a Vercel dá ao deploy, mesmo com outro Host no pedido', () => {
+  const headers = { host: 'interno.vercel.internal', origin: `https://${APP}` }
+  assert.equal(isAllowedOrigin(headers, []), false)
+  process.env.VERCEL_PROJECT_PRODUCTION_URL = APP
+  try {
+    assert.equal(isAllowedOrigin(headers, []), true)
+    // Só o endereço exato, sem subdomínio
+    assert.equal(isAllowedOrigin({ ...headers, origin: `https://x.${APP}` }, []), false)
+  } finally {
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL
+  }
+  assert.equal(isAllowedOrigin({ host: 'interno', 'x-forwarded-host': APP, referer: `https://${APP}/` }, []), true)
 })
 
 test('aceita o host da plataforma da lista e os subdomínios dele', () => {

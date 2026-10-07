@@ -5,7 +5,9 @@
 //
 // Aceita:
 //   · o próprio app: o host do pedido (o domínio da Vercel ou o domínio próprio,
-//     sem configurar nada), já que o front chama /api/* do mesmo endereço;
+//     sem configurar nada), já que o front chama /api/* do mesmo endereço, e os
+//     endereços que a Vercel dá ao deploy (VERCEL_URL, VERCEL_BRANCH_URL,
+//     VERCEL_PROJECT_PRODUCTION_URL);
 //   · os hosts de EMBED_HOSTS (o host da plataforma onde o botão abre), cada um
 //     com os subdomínios.
 // Sem Origin nem Referer, só passa o pedido que o navegador marca como
@@ -30,11 +32,22 @@ function hostOf(url) {
   }
 }
 
+function ownHosts(headers) {
+  const env = process.env
+  return [
+    headers.host,
+    ...String(headers['x-forwarded-host'] ?? '').split(','),
+    env.VERCEL_URL, env.VERCEL_BRANCH_URL, env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]
+    .map(h => String(h ?? '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
 export function isAllowedOrigin(headers = {}, extraHosts = parseHosts(process.env.EMBED_HOSTS)) {
-  const own = String(headers.host ?? '').toLowerCase()
+  const own = ownHosts(headers)
   const allowed = host => {
     if (!host) return false
-    if (own && host === own) return true
+    if (own.includes(host)) return true
     const name = host.replace(/:\d+$/, '')
     return extraHosts.some(h => name === h || name.endsWith(`.${h}`))
   }
