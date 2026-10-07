@@ -115,15 +115,16 @@ As variáveis de ambiente na Vercel são `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` 
 
 O `idconta` da URL não é segredo: aparece no item de menu de cada clínica. Por isso as rotas que o botão chama sem senha se protegem de dois jeitos:
 
-1. **Prova de origem** (`api/_origin.js`), em `/api/clinic`, `/api/proxy`, `/api/clinicorp`, `/api/crm` e `/api/reminder-log`. O pedido só passa quando o `Origin` (ou, no GET, o `Referer`) é:
-   - do próprio app: o host que serviu o pedido, seja o domínio da Vercel, seja um domínio próprio, sem configurar nada (o front chama `/api/*` do mesmo endereço);
+1. **Prova de origem** (`api/_origin.js`), em `/api/clinic`, `/api/proxy`, `/api/clinicorp`, `/api/crm` e `/api/reminder-log`. O pedido só passa quando o `Origin` (ou o `Referer`, quando não há `Origin`, como no GET do próprio app) é:
+   - do próprio app: o host que serviu o pedido, seja o domínio da Vercel, seja um domínio próprio, sem configurar nada (o front chama `/api/*` do mesmo endereço), ou um dos endereços que a Vercel dá ao deploy (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`);
    - ou de um host da variável `EMBED_HOSTS` (o host da plataforma onde o botão abre), com os subdomínios.
 
    Sem `Origin` nem `Referer`, só passa o pedido que o navegador marca com `Sec-Fetch-Site: same-origin`. O resto volta `403 { error: 'origin_not_allowed' }`, antes de ir ao banco. É barreira contra outro site usar o navegador do operador, não garantia: quem monta o pedido à mão forja esses cabeçalhos. O `/setup` e as rotas admin não mudam (senha).
 2. **Lista de caminhos no proxy** (`api/proxy.js`): só os caminhos e métodos da tabela em "Endpoints consumidos", abaixo, com os ids conferidos (sem `.`, `/` ou `%`) e a query remontada. O resto volta `403 { error: 'path_not_allowed' }`. Além disso:
    - a busca de card exige `ContactId` e `PageSize=1`, `PageNumber=1` (não lista o painel);
-   - mover card (`PUT`) só aceita `fields` entre `stepId`, `customFields` e `tagIds`;
-   - o lembrete só sai com um modelo ativo do Setup, pelo canal configurado nele (`403 { error: 'body_not_allowed' }` no resto).
+   - mover card (`PUT`) exige `fields` com pelo menos um entre `stepId`, `customFields` e `tagIds`, e nada fora deles;
+   - o lembrete só sai com um modelo ativo do Setup, pelo canal configurado nele;
+   - nesses dois, o corpo só leva as chaves que o front manda, na grafia exata, e vai à plataforma o corpo conferido (`403 { error: 'body_not_allowed' }` no resto).
 
    Chamada nova à plataforma no front entra na lista e no teste de contrato (`api/_proxy.test.js`, que roda as funções de `src/services/helena.js`).
 
