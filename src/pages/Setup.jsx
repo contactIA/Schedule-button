@@ -430,7 +430,7 @@ function PanelPicker({ panels, picked, onTogglePanel, onUpdatePanel, onToggleTag
 }
 
 // ── Password Modal ────────────────────────────────────────────────
-function PasswordModal({ onSuccess, onCancel }) {
+function PasswordModal({ onSuccess, onCancel, passwordOff, notice }) {
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
@@ -448,7 +448,7 @@ function PasswordModal({ onSuccess, onCancel }) {
     try {
       const res = await fetch('/api/clinics', { headers: { 'x-admin-key': value } })
       const data = await res.json().catch(() => ({}))
-      if (res.status === 401) throw new Error('Senha incorreta.')
+      if (res.status === 401) throw new Error(data.senhaDesligada ? data.error : 'Senha incorreta.')
       if (!res.ok) throw new Error(data.error || 'Erro ao conectar com o servidor.')
       onSuccess(value, data.clinics ?? [])
     } catch (err) {
@@ -467,7 +467,15 @@ function PasswordModal({ onSuccess, onCancel }) {
       <div className={`modal-card ${shake ? 'modal-shake' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="modal-icon">🔐</div>
         <h2 className="modal-title">Área restrita</h2>
-        <p className="modal-sub">Digite a senha de administrador para continuar.</p>
+        {notice && <p className="modal-error">{notice}</p>}
+        {passwordOff ? (
+          <p className="modal-sub">
+            A entrada por senha está desligada. Abra este setup pelo setup do CRM, no botão
+            &quot;Abrir o setup do Schedule Button&quot; da clínica.
+          </p>
+        ) : (
+        <>
+        <p className="modal-sub">Digite a senha de administrador ou abra este setup pelo setup do CRM.</p>
         <form onSubmit={handleSubmit} className="modal-form">
           <input
             ref={inputRef}
@@ -483,6 +491,8 @@ function PasswordModal({ onSuccess, onCancel }) {
             {checking ? 'Verificando...' : 'Entrar'}
           </button>
         </form>
+        </>
+        )}
         <button className="modal-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
@@ -1700,12 +1710,42 @@ function Success({ data, onNew, onList }) {
 
 // ── Root ──────────────────────────────────────────────────────────
 export default function Setup() {
-  const [view, setView] = useState('password') // password | list | create | edit | success
+  const [view, setView] = useState('checking') // checking | password | list | create | edit | success
+  // '' = sessão aberta pelo link do setup do CRM (cookie); senão, a senha
   const [adminKey,    setAdminKey]    = useState(null)
   const [clinics,     setClinics]     = useState([])
   const [editingId,   setEditingId]   = useState(null)
   const [flash,       setFlash]       = useState(null)
   const [successData, setSuccessData] = useState(null)
+  const [passwordOff, setPasswordOff] = useState(false)
+  // O setup do CRM abre /api/setup/entrar?t=..., que grava o cookie da sessão e
+  // volta para cá (?clinica=<companyId> abre a clínica; ?aviso= quando o link
+  // não valeu). Sem sessão, a senha.
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const notice = params.get('aviso') === 'link_invalido'
+    ? 'O link de acesso não vale mais. Abra de novo pelo setup do CRM.'
+    : ''
+
+  useEffect(() => {
+    const companyId = params.get('clinica')
+    if (params.toString()) window.history.replaceState(null, '', window.location.pathname)
+
+    fetch('/api/clinics')
+      .then(async r => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          setPasswordOff(data.senhaDesligada === true)
+          setView('password')
+          return
+        }
+        const list = data.clinics ?? []
+        setAdminKey('')
+        setClinics(list)
+        const target = companyId && list.find(c => c.helenaAccountId === companyId)
+        if (target) { setEditingId(target.id); setView('edit') } else setView('list')
+      })
+      .catch(() => setView('password'))
+  }, [params])
 
   const refreshClinics = (key = adminKey) =>
     fetch('/api/clinics', { headers: { 'x-admin-key': key } })
@@ -1715,9 +1755,13 @@ export default function Setup() {
 
   return (
     <div className="setup-root">
+      {view === 'checking' && <div className="setup-password-bg" />}
+
       {view === 'password' && (
         <div className="setup-password-bg">
           <PasswordModal
+            passwordOff={passwordOff}
+            notice={notice}
             onSuccess={(key, list) => { setAdminKey(key); setClinics(list); setView('list') }}
             onCancel={() => window.history.back()}
           />
