@@ -146,6 +146,9 @@ clinics (
   helena_tags jsonb,               -- cache de etiquetas
   helena_panels jsonb,             -- painéis escolhidos no onboarding
   scheduled_message jsonb,         -- config do lembrete de agendamento (opcional)
+  crm_enabled boolean, crm_api_key text,       -- espelho no CRM ContactIA
+  provisionado_em timestamptz,     -- preenchida = veio do setup do CRM (enviadoEm do último retrato)
+  envia_lembrete_de_consulta boolean, -- provisionada: o botão envia o lembrete de consulta
   active boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 )
@@ -164,6 +167,9 @@ units (
   clinicorp_subscriber_id text,
   clinicorp_business_id bigint,
   clinicorp_code_link int,
+  bookable_professional_ids jsonb, -- ids do Clinicorp agendáveis; null = todos
+  crm_unit_id uuid,                -- unidade no CRM ContactIA
+  provisionado_em timestamptz,     -- preenchida = veio do setup do CRM
   active boolean DEFAULT true
 )
 
@@ -180,9 +186,44 @@ professionals (
 
 ---
 
+## Setup unificado: o cadastro vem do CRM
+
+Desde a Etapa 15 do CRM ContactIA (ADR 0014 de lá, `Docs/ARCHITECTURE.md` seção 6), o setup do CRM é o único setup dos produtos. O botão recebe uma cópia do cadastro e continua agendando sozinho, sem chamar o CRM.
+
+### Provisionamento (`POST /api/provisionamento`, CRM#217)
+
+O worker do CRM manda o retrato inteiro da clínica ao salvar o cadastro com o produto ligado (e ao ligar ou desligar), e tenta de novo se falhar.
+
+- **Autenticação:** `Authorization: Bearer <CHAVE_DE_PROVISIONAMENTO>`, comparada em tempo constante. A mesma chave fica no CRM como `BOTAO_CHAVE_DE_PROVISIONAMENTO`. Sem a variável aqui: `503`. Chave errada: `401`.
+- **Corpo:** `versao: 1`, `enviadoEm`, `companyId`, `nome`, `fusoHorario`, `ligado`, `tokenPlataforma`, `enviaLembreteDeConsulta`, `crm: { chaveDaApi, urlDaApi }` e `unidades[]` (`crmUnitId`, `nome`, `principal`, `ativa`, `clinicorp: { usuario, token, subscriberId, baseUrl, businessId, codeLink }`, `profissionaisAgendaveis: [{ id, nome }]`). Corpo fora disso: `400 { erro, codigo }`.
+- **Resposta:** `200 { ok: true, clinicaId }` (`clinicaId: null` quando chega `ligado: false` de uma clínica que nunca esteve aqui; `ignorado: true` quando o retrato é mais velho que o aplicado).
+- **O que grava,** de forma idempotente:
+  - `clinics` pelo `helena_account_id`: `name`, `active` (= `ligado`, nunca apaga), `helena_token` (null não apaga o que existe), `envia_lembrete_de_consulta` e `provisionado_em` (= `enviadoEm`). A clínica que falta é criada, sem painel;
+  - `crm.chaveDaApi` liga o espelho (`crm_enabled = true`, `crm_api_key`). Sem ela (`null`), fica a configuração que já está aqui, porque a chave só vem aberta no envio em que o CRM a criou;
+  - `units` pelo `crm_unit_id`. Na primeira vez, adota a unidade cadastrada aqui que é o mesmo negócio do Clinicorp (`clinicorp_business_id`) ou tem o mesmo nome. Grava a credencial, o `business_id`, o `code_link`, `active` (= `ativa`) e os profissionais em `bookable_professional_ids` (lista vazia = `null` = todos). A unidade provisionada que não vem mais é desativada;
+  - `fusoHorario`, `clinicorp.baseUrl`, `crm.urlDaApi` e o nome dos profissionais não são gravados: o botão usa o fuso fixo, a URL fixa do Clinicorp, a `CRM_API_URL` e os nomes ao vivo do Clinicorp.
+- **No setup daqui,** a clínica e as unidades provisionadas têm o selo "do setup do CRM": o nome, o token, o status, a ligação com o CRM e as unidades só se leem, e as rotas admin recusam mudá-los. Os painéis, as etapas, as etiquetas e as mensagens do lembrete continuam aqui (decisão #212 do CRM em aberto).
+- A clínica que chegou pelo CRM e ainda não teve o painel escolhido aqui não carrega no botão (`/api/clinic` responde `not_registered`).
+- Precisa da migração `supabase/migrations/20261008120000_provisionamento_pelo_crm.sql` (ainda não aplicada).
+
+### Um remetente do lembrete de consulta (CRM#218)
+
+O setup do CRM escolhe quem envia o lembrete de consulta de cada clínica (o app de Lembretes, o CRM, o botão ou ninguém). Na clínica provisionada, o `scheduled_message` só agenda com `enviaLembreteDeConsulta: true`: sem isso, o `/api/clinic` não manda o lembrete à tela e o proxy recusa o `POST /chat/v1/scheduled-message`. A clínica que não veio do CRM segue como antes. Teste: `api/_scheduled-message.test.js`.
+
+### Uma senha só (`GET /api/setup/entrar?t=`, CRM#219)
+
+O setup do CRM gera, na hora do clique, um link curto e assinado para o setup daqui:
+
+- **Token:** `base64url(JSON do payload) + "." + base64url(HMAC-SHA256(SETUP_LINK_SEGREDO, payload já codificado))`, com o payload `{ "v": 1, "tipo": "setup", "companyId": "<uuid>" | null, "exp": <unix segundos> }` e 120 segundos de validade. No CRM, o segredo é o `BOTAO_SETUP_SEGREDO`.
+- **A rota** confere a assinatura em tempo constante, o `v`, o `tipo` e a validade, grava o cookie `sb_setup_sessao` (8 horas, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) e leva ao `/setup`, já na clínica do `companyId` (`/setup?clinica=<companyId>`). Link inválido ou vencido: `/setup?aviso=link_invalido`, sem dizer o motivo. Sem `SETUP_LINK_SEGREDO`: `503`.
+- **As rotas admin** aceitam a senha (`x-admin-key`) ou o cookie. `SETUP_SENHA_DESLIGADA=1` (ou `true`) desliga a senha, e a tela de entrar diz para abrir pelo setup do CRM. Desligar em produção só com OK da equipe.
+- Teste: `api/_setup-token.test.js`.
+
+---
+
 ## Painel admin (`/setup`)
 
-Página protegida por senha server-side. Abre na **lista de clínicas cadastradas**, com edição completa e cadastro de novas.
+Página protegida por senha server-side, ou aberta pelo link assinado do setup do CRM (acima). Abre na **lista de clínicas cadastradas**, com edição completa e cadastro de novas.
 
 ### Cadastro — wizard de 3 passos
 
@@ -246,10 +287,14 @@ src/
 
 api/
   _supabase.js        — Client Supabase + queries de clínica/unidade
-  _auth.js            — requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
+  _auth.js            — requireAdmin (x-admin-key vs ADMIN_PASSWORD, ou a sessão do link do CRM)
+  _setup-token.js     — link assinado e sessão do setup (CRM#219)
+  _provisionamento.js — conferência e gravação do retrato do CRM (CRM#217)
   _clinicorp.js       — fetchBusinessId/fetchProfessionals compartilhados
   _origin.js          — requireAllowedOrigin (prova de origem das rotas sem senha)
-  _scheduled-message.js — normalizeScheduledMessage (clinic.js e proxy.js)
+  _scheduled-message.js — normalizeScheduledMessage e clinicScheduledMessage (clinic.js e proxy.js)
+  provisionamento.js  — POST /api/provisionamento, o worker do CRM entrega o cadastro
+  setup/entrar.js     — GET /api/setup/entrar?t=, o setup do CRM abre o setup daqui
   clinic.js           — Config pública da clínica por idconta (sem tokens)
   proxy.js            — Proxy Helena (lista de caminhos, injeta token da clínica, resolve CORS)
   clinicorp.js        — Slots, dias disponíveis, histórico do paciente e agendamento
@@ -347,6 +392,12 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
   (`VITE_ADMIN_PASSWORD` é obsoleta e pode ser removida do dashboard)
 - Opcionais: `CRM_API_URL` e `EMBED_HOSTS` (hosts aceitos além do próprio app, separados
   por vírgula, ex. `app.fluxodonto.com`; vazio = só o próprio app, que é o que o botão usa)
+- Setup unificado (a equipe preenche, ver `.env.example`):
+  - `CHAVE_DE_PROVISIONAMENTO`: a chave de serviço do `POST /api/provisionamento`, igual à
+    `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM (vazia = 503);
+  - `SETUP_LINK_SEGREDO`: o segredo do link assinado do setup, igual ao `BOTAO_SETUP_SEGREDO`
+    do CRM (vazio = 503 no `/api/setup/entrar` e só a senha entra);
+  - `SETUP_SENHA_DESLIGADA`: `1` ou `true` desligam a entrada por senha (só com OK da equipe).
 
 ---
 
@@ -357,6 +408,13 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 ---
 
 ## Changelog
+
+### 2026-10-08: Setup unificado (Etapa 15 do CRM)
+
+- **Provisionamento** pelo setup do CRM em `POST /api/provisionamento` (CRM#217), com a chave `CHAVE_DE_PROVISIONAMENTO` e a migração `20261008120000_provisionamento_pelo_crm.sql` (não aplicada)
+- O setup mostra só para leitura o que vem do CRM
+- **Um remetente do lembrete de consulta** (CRM#218): na clínica provisionada, o botão só agenda o lembrete quando o CRM o escolheu
+- **Link assinado do setup** (CRM#219) em `GET /api/setup/entrar?t=`, com `SETUP_LINK_SEGREDO`, e `SETUP_SENHA_DESLIGADA` para desligar a senha
 
 ### 2026-10-07 — Rotas do operador fechadas
 
