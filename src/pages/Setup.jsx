@@ -528,7 +528,10 @@ function ClinicList({ clinics, flash, onEdit, onNew }) {
             {clinics.map(c => (
               <div key={c.id} className="clinic-row">
                 <div className="clinic-row-info">
-                  <span className="clinic-row-name">{c.name}</span>
+                  <span className="clinic-row-name">
+                    {c.name}
+                    {c.provisionado && <span className="crm-source-badge">do setup do CRM</span>}
+                  </span>
                   <span className="clinic-row-meta">
                     idconta: {c.helenaAccountId || '—'} · {c.unitsCount} unidade(s)
                   </span>
@@ -562,6 +565,8 @@ function ClinicList({ clinics, flash, onEdit, onNew }) {
 // e codeLink no servidor.
 function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDeleted }) {
   const isNew = !unit
+  // Unidade provisionada pelo setup do CRM: tudo aqui só para leitura
+  const readOnly = !!unit?.provisionado
   const [expanded,     setExpanded]     = useState(isNew)
   const [name,         setName]         = useState(unit?.name ?? '')
   const [user,         setUser]         = useState(unit?.clinicorpUser ?? '')
@@ -691,6 +696,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
         <span className="unit-card-name">
           {isNew ? 'Nova unidade' : (unit.name || 'Unidade')}
           {unit && !unit.active && <span className="unit-badge-off"> inativa</span>}
+          {readOnly && <span className="crm-source-badge">do setup do CRM</span>}
         </span>
         <div className="unit-card-actions">
           {isNew && onCancel && (
@@ -703,18 +709,25 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
 
       {expanded && (
         <div className="unit-card-body">
+          {readOnly && (
+            <div className="crm-source-notice">
+              Esta unidade vem do setup do CRM: nome, credencial do Clinicorp, profissionais
+              agendáveis, unidade no CRM e status se editam lá.
+            </div>
+          )}
           <div className="admin-field">
             <label>Nome da unidade *</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="Ex: Unidade Centro" />
+              placeholder="Ex: Unidade Centro" disabled={readOnly} />
           </div>
 
           <div className="admin-field">
             <label>Usuário API Clinicorp *</label>
             <input type="text" value={user} onChange={e => setUser(e.target.value)}
-              placeholder="Ex: clinicasorriso" autoComplete="off" />
+              placeholder="Ex: clinicasorriso" autoComplete="off" disabled={readOnly} />
           </div>
 
+          {!readOnly && (
           <div className="admin-field">
             <label>Token API Clinicorp {isNew ? '*' : ''}</label>
             <input type="password" value={token} onChange={e => setToken(e.target.value)}
@@ -722,17 +735,18 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
               autoComplete="new-password" />
             {!isNew && <span className="admin-field-hint">Preencha somente para substituir o token atual.</span>}
           </div>
+          )}
 
           <div className="admin-field">
             <label>Subscriber ID <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
-            <input type="text" value={subscriberId} onChange={e => setSubscriberId(e.target.value.trim())} />
+            <input type="text" value={subscriberId} onChange={e => setSubscriberId(e.target.value.trim())} disabled={readOnly} />
           </div>
 
           <div className="admin-field">
             <label>Code Link <span style={{fontWeight:400,color:'var(--apagado-2)'}}>(opcional)</span></label>
             <input type="text" value={codeLink}
               onChange={e => setCodeLink(e.target.value.trim())}
-              placeholder="Buscado automaticamente" />
+              placeholder="Buscado automaticamente" disabled={readOnly} />
           </div>
 
           {!isNew && (
@@ -762,6 +776,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
                           key={p.id}
                           type="button"
                           className={`tag-pick${on ? ' tag-pick-active prof-pick-active' : ''}`}
+                          disabled={readOnly}
                           onClick={() => setBookableIds(prev =>
                             on ? prev.filter(x => x !== p.id) : [...prev, p.id])}
                         >
@@ -773,14 +788,16 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
                   <span className="admin-field-hint">
                     {bookableIds.length === 0
                       ? 'Nenhum selecionado = todos aparecem para agendamento.'
-                      : 'Somente os selecionados aparecem para agendamento. Salvo com "Salvar unidade".'}
+                      : readOnly
+                        ? 'Somente os selecionados aparecem para agendamento.'
+                        : 'Somente os selecionados aparecem para agendamento. Salvo com "Salvar unidade".'}
                   </span>
                 </>
               )}
             </div>
           )}
 
-          {!isNew && crm?.hasKey && (
+          {!isNew && crm?.hasKey && !readOnly && (
             <div className="admin-field">
               <label>Unidade no CRM</label>
               {crmUnits === null && !crm.error && (
@@ -811,6 +828,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
           {error   && <div className="admin-error-box">{error}</div>}
           {savedOk && <div className="clinic-flash">✓ Unidade salva.</div>}
 
+          {!readOnly && (
           <div className="unit-editor-actions">
             {!isNew && (
               <button type="button" className="admin-btn-danger" disabled={busy}
@@ -830,6 +848,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
                 : isNew ? 'Criar unidade' : 'Salvar unidade'}
             </button>
           </div>
+          )}
         </div>
       )}
     </div>
@@ -935,6 +954,8 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
       .finally(() => setLoading(false))
   }, [adminKey, clinicId])
 
+  const fromCrm = clinic?.provisionado === true
+
   const handleSave = async (e) => {
     e.preventDefault()
     if (reminderInvalid(reminder)) {
@@ -949,13 +970,16 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
         body: JSON.stringify({
           id:          clinicId,
-          name,
           slug,
-          active:      clinicActive,
-          helenaToken: newToken.trim() || undefined,
-          // Só vai o que mudou: o banco sem as colunas do CRM continua salvando
-          crmEnabled: crmEnabled !== (clinic.crmEnabled === true) ? crmEnabled : undefined,
-          crmApiKey:  newCrmKey.trim() || undefined,
+          // Clínica do setup do CRM: nome, token, status e CRM se editam lá
+          ...(fromCrm ? {} : {
+            name,
+            active:      clinicActive,
+            helenaToken: newToken.trim() || undefined,
+            // Só vai o que mudou: o banco sem as colunas do CRM continua salvando
+            crmEnabled: crmEnabled !== (clinic.crmEnabled === true) ? crmEnabled : undefined,
+            crmApiKey:  newCrmKey.trim() || undefined,
+          }),
           // undefined → não mexe na config salva (tolera banco sem a coluna)
           scheduledMessage: reminder ?? undefined,
           helenaPanels: pickedPanels.map(p => ({
@@ -1043,9 +1067,17 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             <p>idconta: <strong>{clinic.helenaAccountId || '—'}</strong></p>
           </div>
 
+          {fromCrm && (
+            <div className="crm-source-notice">
+              Esta clínica vem do setup do CRM. O nome, o token da plataforma, o status, a
+              ligação com o CRM, as unidades e quem envia o lembrete de consulta se editam lá.
+              Aqui ficam os painéis, as etapas, as etiquetas e as mensagens do lembrete.
+            </div>
+          )}
+
           <div className="admin-field">
-            <label>Nome da clínica *</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} required />
+            <label>Nome da clínica *{fromCrm && <span className="crm-source-badge">do setup do CRM</span>}</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} required disabled={fromCrm} />
           </div>
 
           <div className="admin-field">
@@ -1053,6 +1085,14 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             <input type="text" value={slug} onChange={e => setSlug(toSlug(e.target.value))} pattern="[a-z0-9-]+" />
           </div>
 
+          {fromCrm ? (
+            <div className="admin-field">
+              <label>Token da plataforma<span className="crm-source-badge">do setup do CRM</span></label>
+              <span className="admin-field-hint">
+                {clinic.hasToken ? 'Token salvo, vindo do setup do CRM.' : 'Sem token: preencha no setup do CRM.'}
+              </span>
+            </div>
+          ) : (
           <div className="admin-field">
             <label>Token Helena</label>
             <input
@@ -1064,6 +1104,15 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             />
             <span className="admin-field-hint">Preencha somente para substituir o token atual.</span>
           </div>
+          )}
+
+          {fromCrm && (
+            <span className="admin-field-hint" style={{ color: clinic.enviaLembreteDeConsulta ? undefined : 'var(--atencao)' }}>
+              {clinic.enviaLembreteDeConsulta
+                ? 'No setup do CRM, o botão é quem envia o lembrete de consulta desta clínica: as mensagens abaixo são agendadas.'
+                : 'No setup do CRM, outro sistema (ou nenhum) envia o lembrete de consulta desta clínica: as mensagens abaixo não são agendadas.'}
+            </span>
+          )}
 
           <ReminderConfig
             channels={channels}
@@ -1072,6 +1121,17 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             loadTemplates={loadReminderTemplates}
           />
 
+          {fromCrm ? (
+            <div className="admin-field">
+              <label>Enviar ao CRM<span className="crm-source-badge">do setup do CRM</span></label>
+              <span className="admin-field-hint">
+                {clinic.crmEnabled
+                  ? 'Ligado: a chave da integração foi criada e enviada pelo setup do CRM.'
+                  : 'Desligado. Liga sozinho quando a clínica tem o CRM no setup do CRM.'}
+              </span>
+            </div>
+          ) : (
+          <>
           <div className="admin-field">
             <label>Enviar ao CRM</label>
             <button
@@ -1109,13 +1169,16 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
                 : 'Chave com escrita, criada pela equipe no setup do CRM. A conexão com o CRM é testada ao salvar.'}
             </span>
           </div>
+          </>
+          )}
 
           <div className="admin-field">
-            <label>Status da clínica</label>
+            <label>Status da clínica{fromCrm && <span className="crm-source-badge">do setup do CRM</span>}</label>
             <button
               type="button"
               className={`reminder-toggle${clinicActive ? ' reminder-toggle-on' : ''}`}
               onClick={() => setClinicActive(v => !v)}
+              disabled={fromCrm}
             >
               <span className="reminder-toggle-knob" />
               {clinicActive ? 'Ativa' : 'Inativa'}
@@ -1149,13 +1212,15 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
                 />
               )}
             </div>
-            {!addingUnit && (
+            {!addingUnit && !fromCrm && (
               <button type="button" className="admin-add-unit-btn" onClick={() => setAddingUnit(true)}>
                 + Adicionar unidade
               </button>
             )}
             <span className="admin-field-hint">
-              Cada unidade salva na hora, independente do botão "Salvar alterações".
+              {fromCrm
+                ? 'As unidades vêm do setup do CRM e se cadastram lá.'
+                : 'Cada unidade salva na hora, independente do botão "Salvar alterações".'}
             </span>
           </div>
 
@@ -1190,6 +1255,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
             </button>
           </div>
 
+          {!fromCrm && (
           <div className="admin-danger-zone">
             <button type="button" className="admin-btn-danger" disabled={deleting} onClick={handleDeleteClinic}>
               {deleting ? 'Excluindo...' : 'Excluir clínica'}
@@ -1198,6 +1264,7 @@ function EditClinic({ adminKey, clinicId, onSaved, onCancel, onDeleted }) {
               Remove a clínica e todas as unidades. Não pode ser desfeito.
             </span>
           </div>
+          )}
         </form>
       </div>
     </div>
