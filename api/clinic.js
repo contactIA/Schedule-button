@@ -1,6 +1,6 @@
 import { getClinicByAccountId } from './_supabase.js'
 import { requireAllowedOrigin } from './_origin.js'
-import { normalizeScheduledMessage } from './_scheduled-message.js'
+import { clinicScheduledMessage } from './_scheduled-message.js'
 
 // Config pública da clínica para o botão. Nenhum token nem credencial
 // (plataforma, Clinicorp, CRM) entra na resposta: _clinic.test.js confere.
@@ -15,6 +15,11 @@ export function makeClinicHandler({ loadClinic = getClinicByAccountId } = {}) {
     try {
       const clinic = await loadClinic(idconta)
       if (!clinic) return res.status(404).json({ error: 'not_registered' })
+      // Clínica que chegou pelo CRM sem o token da plataforma ou que ainda não
+      // teve o painel escolhido no setup
+      if (!clinic.helena_token || (!clinic.helena_panels?.length && !clinic.helena_panel_id)) {
+        return res.status(404).json({ error: 'not_registered' })
+      }
 
       // Normaliza steps do banco: aceita tanto { name } quanto { title }
       const normalizeSteps = (arr) => (arr ?? []).map(s => ({
@@ -69,7 +74,7 @@ export function makeClinicHandler({ loadClinic = getClinicByAccountId } = {}) {
         tags:           clinic.helena_tags  ?? [],
         // Config do lembrete — só vai ao runtime quando ativado, sempre no
         // shape de lista e só com as mensagens visíveis para o operador
-        scheduledMessage: normalizeScheduledMessage(clinic.scheduled_message),
+        scheduledMessage: clinicScheduledMessage(clinic),
         panels,
         units,
       })

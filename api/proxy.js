@@ -1,6 +1,6 @@
 import { getClinicByAccountId } from './_supabase.js'
 import { requireAllowedOrigin } from './_origin.js'
-import { normalizeScheduledMessage } from './_scheduled-message.js'
+import { clinicScheduledMessage } from './_scheduled-message.js'
 
 const BASE = 'https://api.wts.chat'
 
@@ -31,7 +31,7 @@ function isCardUpdate(body) {
 function isConfiguredReminder(body, clinic) {
   if (!hasOnlyKeys(body, REMINDER_KEYS)) return false
   if (body.type !== 'TEMPLATE' || !body.templateId) return false
-  const messages = normalizeScheduledMessage(clinic.scheduled_message)?.messages ?? []
+  const messages = clinicScheduledMessage(clinic)?.messages ?? []
   return messages.some(m => m.templateId === body.templateId && (m.channelFrom || null) === (body.from || null))
 }
 
@@ -119,6 +119,8 @@ export function makeProxyHandler({ loadClinic = getClinicByAccountId, fetchImpl 
 
     const clinic = await loadClinic(idconta)
     if (!clinic) return res.status(404).json({ error: 'not_registered' })
+    // Clínica que chegou pelo CRM sem o token da plataforma (CRM#217)
+    if (!clinic.helena_token) return res.status(404).json({ error: 'not_registered' })
 
     const checked = match.route.body ? parseBody(req.body) : undefined
     if (match.route.body && !match.route.body(checked, clinic)) {

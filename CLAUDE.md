@@ -8,7 +8,7 @@ Contexto e convenções para o agente de IA neste projeto.
 
 Ferramenta multi-tenant para clínicas odontológicas. Operadores do CRC abrem a tela a partir de um contato no WhatsApp (URL com `?idconta=...&contactId=...`) e criam cards no CRM Helena + agendamentos no Clinicorp em um fluxo de 2 etapas. Também funciona sem `contactId` (busca manual de contato por telefone).
 
-Administradores cadastram e editam clínicas em `/setup` (senha em `ADMIN_PASSWORD`).
+Administradores cadastram e editam clínicas em `/setup` (senha em `ADMIN_PASSWORD`, ou pelo link assinado do setup do CRM). Com o setup unificado (Etapa 15 do CRM, ADR 0014 de lá), o cadastro da clínica vem do setup do CRM por provisionamento: ver "Setup unificado" abaixo e no README.
 
 ---
 
@@ -43,7 +43,11 @@ api/_crm.js       → Cliente da API do CRM, regra criar/mover e teste de conex�
 api/crm-preview.js → Unidades do CRM da clínica para o seletor do Setup (admin, só leitura no CRM)
 api/_supabase.js  → Cliente Supabase + queries compartilhadas (não vira função)
 api/_clinicorp.js → fetchBusinessId/fetchProfessionals compartilhados
-api/_auth.js      → requireAdmin (header x-admin-key vs ADMIN_PASSWORD)
+api/_auth.js      → requireAdmin (header x-admin-key vs ADMIN_PASSWORD, ou a sessão do link do setup do CRM)
+api/_setup-token.js → Link assinado e cookie da sessão de setup (CRM#219)
+api/setup/entrar.js → GET /api/setup/entrar?t=, o setup do CRM abre o /setup daqui
+api/provisionamento.js → POST /api/provisionamento, o worker do CRM entrega o cadastro (CRM#217)
+api/_provisionamento.js → Conferência do corpo e gravação idempotente em clinics e units
 api/_origin.js    → requireAllowedOrigin (prova de origem das rotas do operador, sem senha)
 api/_scheduled-message.js → normalizeScheduledMessage (clinic.js e proxy.js)
 ```
@@ -66,6 +70,9 @@ Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `pr
 | Espelho no CRM por clínica/unidade | Supabase `clinics.crm_enabled`, `units.crm_unit_id` (Setup) |
 | Endereço da API do CRM | env var `CRM_API_URL` (opcional; padrão `https://crm.contactia.com.br/api/v1`) |
 | Hosts aceitos além do próprio app | env var `EMBED_HOSTS` (opcional, vírgula; vazio = só o próprio app) |
+| Chave de serviço do provisionamento | env var `CHAVE_DE_PROVISIONAMENTO` (= `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM; vazia = 503) |
+| Segredo do link do setup | env var `SETUP_LINK_SEGREDO` (= `BOTAO_SETUP_SEGREDO` do CRM; vazio = 503 no link) |
+| Desligar a senha do setup | env var `SETUP_SENHA_DESLIGADA` (`1` ou `true`; só com OK da equipe) |
 
 A clínica é identificada por `?idconta=` (companyId da conta Helena → `clinics.helena_account_id`).
 
@@ -93,6 +100,16 @@ O card continua sendo criado/movido no painel nativo (Helena) como sempre. Nas c
 Configuração no Setup: em "Editar clínica", o interruptor "Enviar ao CRM" e a "Chave da API do CRM" (chave nova ou envio ligado testa a conexão com `GET /eu` e `GET /unidades` antes de gravar; chave só de leitura é recusada); em cada unidade, o seletor "Unidade no CRM". Com o envio ligado, o lembrete de Agendados do CRM deve ficar desligado na clínica, senão o paciente recebe dois (o do botão continua igual).
 
 A clínica do CRM vai no `X-Clinica` pelo `helena_account_id` (companyId). Card já no CRC2 não é movido. Falha no CRM só aparece no log da função (`[crm]`) e no console do operador — nunca bloqueia o agendamento. Migração das colunas: `supabase/migrations/20261002120000_crm_integration.sql`.
+
+---
+
+## Setup unificado (cadastro pelo CRM)
+
+- **O que vem do CRM** (`clinics.provisionado_em` e `units.provisionado_em` preenchidas) fica só para leitura no `/setup`, e as rotas admin (`clinics.js`, `units.js`) recusam mudar: nome, token, status, ligação com o CRM e as unidades. Os painéis, as etapas, as etiquetas e as mensagens do lembrete seguem aqui (decisão #212 do CRM em aberto). Campo novo que venha do CRM entra nessa regra.
+- **O formato do provisionamento é contrato com o CRM** (o resumo está no README, em "Setup unificado"). Não mude o corpo nem as respostas sem combinar com o CRM.
+- **Lembrete de consulta:** use `clinicScheduledMessage(clinic)`, não `normalizeScheduledMessage` direto, em tudo que decide se o lembrete sai (CRM#218).
+- **Código novo tolera o banco sem a migração `20261008120000`:** leia as colunas novas de `select('*')` e trate ausente como "não provisionada".
+- Testes: `api/_provisionamento.test.js`, `api/_scheduled-message.test.js` e `api/_setup-token.test.js`.
 
 ---
 

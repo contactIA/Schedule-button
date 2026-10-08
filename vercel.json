@@ -7,7 +7,8 @@
     "api/clinics.js":        { "maxDuration": 15 },
     "api/helena-preview.js": { "maxDuration": 10 },
     "api/crm.js":            { "maxDuration": 30 },
-    "api/crm-preview.js":    { "maxDuration": 15 }
+    "api/crm-preview.js":    { "maxDuration": 15 },
+    "api/provisionamento.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/setup", "destination": "/index.html" }

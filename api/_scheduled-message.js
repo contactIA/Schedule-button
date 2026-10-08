@@ -19,3 +19,11 @@ export function normalizeScheduledMessage(sm) {
     }))
   return messages.length > 0 ? { enabled: true, messages } : null
 }
+
+// O lembrete que vale para a clínica (CRM#218): na clínica provisionada pelo
+// CRM, só quando o CRM escolheu o botão como remetente do lembrete de consulta
+// (envia_lembrete_de_consulta). A clínica cadastrada só aqui segue como antes.
+export function clinicScheduledMessage(clinic) {
+  if (clinic?.provisionado_em && clinic.envia_lembrete_de_consulta !== true) return null
+  return normalizeScheduledMessage(clinic?.scheduled_message)
+}

@@ -3,6 +3,10 @@ import { requireAdmin } from './_auth.js'
 import { fetchBusinessId, fetchProfessionals } from './_clinicorp.js'
 import { isUuid } from './_crm.js'
 
+// Unidade provisionada pelo setup do CRM (CRM#217): nome, credencial do
+// Clinicorp, profissionais agendáveis, unidade no CRM e status vêm de lá.
+const FROM_CRM = 'Esta unidade vem do setup do CRM e só se edita lá.'
+
 function toClient(u) {
   return {
     id:            u.id,
@@ -15,6 +19,7 @@ function toClient(u) {
     codeLink:      u.clinicorp_code_link,
     bookableProfessionalIds: u.bookable_professional_ids ?? null,
     crmUnitId:     u.crm_unit_id ?? null,
+    provisionado:  !!u.provisionado_em,
   }
 }
 
@@ -56,8 +61,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { data: clinic } = await db.from('clinics').select('id').eq('id', clinicId).maybeSingle()
+      const { data: clinic } = await db.from('clinics').select('*').eq('id', clinicId).maybeSingle()
       if (!clinic) return res.status(404).json({ error: 'Clínica não encontrada.' })
+      if (clinic.provisionado_em) {
+        return res.status(400).json({ error: 'As unidades desta clínica vêm do setup do CRM. Cadastre a unidade lá.' })
+      }
 
       const subId = (subscriberId || clinicorpUser).trim()
       let businessId, finalCodeLink
@@ -108,6 +116,7 @@ export default async function handler(req, res) {
     try {
       const { data: current } = await db.from('units').select('*').eq('id', id).maybeSingle()
       if (!current) return res.status(404).json({ error: 'Unidade não encontrada.' })
+      if (current.provisionado_em) return res.status(400).json({ error: FROM_CRM })
 
       // Última unidade ativa não pode ser desativada — quebraria o runtime da clínica
       if (active === false && current.active) {
@@ -178,8 +187,9 @@ export default async function handler(req, res) {
     if (!id) return res.status(400).json({ error: 'Campo id obrigatório.' })
 
     try {
-      const { data: current } = await db.from('units').select('id, clinic_id, active').eq('id', id).maybeSingle()
+      const { data: current } = await db.from('units').select('*').eq('id', id).maybeSingle()
       if (!current) return res.status(404).json({ error: 'Unidade não encontrada.' })
+      if (current.provisionado_em) return res.status(400).json({ error: FROM_CRM })
 
       // Última unidade ativa não pode ser excluída — quebraria o runtime.
       // Para remover a clínica inteira, use a exclusão da clínica.

@@ -84,3 +84,15 @@ test('clínica não cadastrada continua not_registered', async () => {
   assert.equal(res.statusCode, 404)
   assert.deepEqual(res.body, { error: 'not_registered' })
 })
+
+test('clínica do CRM sem o token da plataforma ou sem painel: not_registered (CRM#217)', async () => {
+  for (const row of [
+    { ...clinic, helena_token: null },
+    { ...clinic, helena_panels: null, helena_panel_id: null },
+  ]) {
+    const res = fakeRes()
+    await makeClinicHandler({ loadClinic: async () => row })(req(), res)
+    assert.equal(res.statusCode, 404)
+    assert.deepEqual(res.body, { error: 'not_registered' })
+  }
+})

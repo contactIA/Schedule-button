@@ -248,3 +248,10 @@ test('clínica não cadastrada continua 404, sem chamar a plataforma', async () 
   assert.equal(res.statusCode, 404)
   assert.equal(h.forwarded.length, 0)
 })
+
+test('clínica do CRM ainda sem o token da plataforma: 404, sem chamar a plataforma (CRM#217)', async () => {
+  const h = harness({ loadClinic: async () => ({ ...clinic, helena_token: null, provisionado_em: '2026-10-08T12:00:00.000Z' }) })
+  const res = await send(h, 'GET', '/core/v1/contact/' + CONTATO)
+  assert.equal(res.statusCode, 404)
+  assert.equal(h.forwarded.length, 0)
+})
