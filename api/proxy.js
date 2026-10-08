@@ -119,6 +119,8 @@ export function makeProxyHandler({ loadClinic = getClinicByAccountId, fetchImpl 
 
     const clinic = await loadClinic(idconta)
     if (!clinic) return res.status(404).json({ error: 'not_registered' })
+    // Clínica que chegou pelo CRM sem o token da plataforma (CRM#217)
+    if (!clinic.helena_token) return res.status(404).json({ error: 'not_registered' })
 
     const checked = match.route.body ? parseBody(req.body) : undefined
     if (match.route.body && !match.route.body(checked, clinic)) {

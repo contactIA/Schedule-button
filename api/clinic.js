@@ -15,8 +15,9 @@ export function makeClinicHandler({ loadClinic = getClinicByAccountId } = {}) {
     try {
       const clinic = await loadClinic(idconta)
       if (!clinic) return res.status(404).json({ error: 'not_registered' })
-      // Clínica que chegou pelo CRM e ainda não teve o painel escolhido no setup
-      if (!clinic.helena_panels?.length && !clinic.helena_panel_id) {
+      // Clínica que chegou pelo CRM sem o token da plataforma ou que ainda não
+      // teve o painel escolhido no setup
+      if (!clinic.helena_token || (!clinic.helena_panels?.length && !clinic.helena_panel_id)) {
         return res.status(404).json({ error: 'not_registered' })
       }
 
