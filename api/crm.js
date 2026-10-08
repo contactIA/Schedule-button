@@ -1,11 +1,13 @@
 import { getClinicByAccountId } from './_supabase.js'
 import { crmClient, syncAppointment } from './_crm.js'
+import { requireAllowedOrigin } from './_origin.js'
 
 // Espelho do card no CRM ContactIA (runtime, fire-and-forget). Desligado por
 // padrão: só age na clínica com clinics.crm_enabled = true, ligado no Setup.
 // É informativo para o operador: sempre responde 2xx e o erro fica no log.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!requireAllowedOrigin(req, res)) return
 
   const b = req.body ?? {}
   const idconta = b.idconta

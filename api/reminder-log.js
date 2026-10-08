@@ -1,9 +1,11 @@
 import { getSupabase } from './_supabase.js'
+import { requireAllowedOrigin } from './_origin.js'
 
 // Auditoria das tentativas de lembrete. É informativo: nunca propaga
 // erro que atrapalhe o operador — sempre responde 2xx.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!requireAllowedOrigin(req, res)) return
 
   try {
     const b = req.body ?? {}

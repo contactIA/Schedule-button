@@ -1,5 +1,6 @@
 import { getClinicByAccountId, getUnitById } from './_supabase.js'
 import { fetchProfessionals } from './_clinicorp.js'
+import { requireAllowedOrigin } from './_origin.js'
 
 const BASE = 'https://api.clinicorp.com/rest/v1'
 
@@ -58,6 +59,8 @@ async function resolveUnit(idconta, unitId) {
 }
 
 export default async function handler(req, res) {
+  if (!requireAllowedOrigin(req, res)) return
+
   const idconta = req.query?.idconta || req.headers?.['x-idconta']
   const unitId  = req.query?.unitId  || req.body?.unitId
   if (!idconta) return res.status(400).json({ error: 'Parâmetro idconta obrigatório' })
