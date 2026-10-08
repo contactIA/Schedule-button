@@ -1,10 +1,11 @@
-import { hasValidSession, passwordDisabled, safeEqual } from './_setup-token.js'
+import { hasValidSession, passwordDisabled, safeEqual, sessionSecret } from './_setup-token.js'
 
 // Duas entradas nas rotas admin, as duas fail-closed:
 // · a senha, no header x-admin-key contra ADMIN_PASSWORD (desligável com
 //   SETUP_SENHA_DESLIGADA=1);
-// · a sessão aberta pelo link assinado do setup do CRM (cookie, CRM#219), que
-//   só existe com SETUP_LINK_SEGREDO.
+// · a sessão aberta pelo link assinado do setup do CRM (cookie, CRM#219),
+//   assinada com sessionSecret(): o SETUP_LINK_SEGREDO, ou, sem ele, uma chave
+//   derivada da SUPABASE_SERVICE_KEY.
 export function requireAdmin(req, res) {
   const key = req.headers?.['x-admin-key']
   const disabled = passwordDisabled()
@@ -28,7 +29,7 @@ export function requireAdmin(req, res) {
 
   if (hasValidSession(req)) return true
 
-  if (!process.env.ADMIN_PASSWORD && !process.env.SETUP_LINK_SEGREDO) {
+  if (!process.env.ADMIN_PASSWORD && !sessionSecret(process.env)) {
     res.status(500).json({ error: 'ADMIN_PASSWORD não configurado no servidor.' })
     return false
   }

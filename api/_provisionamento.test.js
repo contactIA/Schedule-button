@@ -201,7 +201,7 @@ test('rota: 503 sem a chave configurada, 401 com chave errada, 400 com corpo rui
   const req = (headers, body = corpo()) => ({ method: 'POST', headers, body })
 
   let res = fakeRes()
-  await makeProvisionamentoHandler({ env: {}, repo: memoryRepo() })(req({ authorization: `Bearer ${KEY}` }), res)
+  await makeProvisionamentoHandler({ env: {}, repo: memoryRepo(), config: async () => null })(req({ authorization: `Bearer ${KEY}` }), res)
   assert.equal(res.statusCode, 503)
 
   const env = { CHAVE_DE_PROVISIONAMENTO: KEY }

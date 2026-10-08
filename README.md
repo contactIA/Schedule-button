@@ -194,7 +194,7 @@ Desde a Etapa 15 do CRM ContactIA (ADR 0014 de lá, `Docs/ARCHITECTURE.md` seç�
 
 O worker do CRM manda o retrato inteiro da clínica ao salvar o cadastro com o produto ligado (e ao ligar ou desligar), e tenta de novo se falhar.
 
-- **Autenticação:** `Authorization: Bearer <CHAVE_DE_PROVISIONAMENTO>`, comparada em tempo constante. A mesma chave fica no CRM como `BOTAO_CHAVE_DE_PROVISIONAMENTO`. Sem a variável aqui: `503`. Chave errada: `401`.
+- **Autenticação:** `Authorization: Bearer <chave>`, a `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM, comparada em tempo constante. Com a variável `CHAVE_DE_PROVISIONAMENTO` aqui, vale ela; sem ela, o sha256 do Bearer é comparado com a linha `provisionamento_sha256` da tabela `configuracao_do_servidor` (abaixo). Sem a variável e sem a linha: `503`. Chave errada: `401`.
 - **Corpo:** `versao: 1`, `enviadoEm`, `companyId`, `nome`, `fusoHorario`, `ligado`, `tokenPlataforma`, `enviaLembreteDeConsulta`, `crm: { chaveDaApi, urlDaApi }` e `unidades[]` (`crmUnitId`, `nome`, `principal`, `ativa`, `clinicorp: { usuario, token, subscriberId, baseUrl, businessId, codeLink }`, `profissionaisAgendaveis: [{ id, nome }]`). Corpo fora disso: `400 { erro, codigo }`.
 - **Resposta:** `200 { ok: true, clinicaId }` (`clinicaId: null` quando chega `ligado: false` de uma clínica que nunca esteve aqui; `ignorado: true` quando o retrato é mais velho que o aplicado).
 - **O que grava,** de forma idempotente:
@@ -205,6 +205,7 @@ O worker do CRM manda o retrato inteiro da clínica ao salvar o cadastro com o p
 - **No setup daqui,** a clínica e as unidades provisionadas têm o selo "do setup do CRM": o nome, o token, o status, a ligação com o CRM e as unidades só se leem, e as rotas admin recusam mudá-los. Os painéis, as etapas, as etiquetas e as mensagens do lembrete continuam aqui (decisão #212 do CRM em aberto).
 - A clínica que chegou pelo CRM e ainda não teve o painel escolhido aqui não carrega no botão (`/api/clinic` responde `not_registered`).
 - Precisa da migração `supabase/migrations/20261008120000_provisionamento_pelo_crm.sql` (ainda não aplicada).
+- Teste: `api/_provisionamento.test.js` e, para a chave pela tabela, `api/_configuracao.test.js`.
 
 ### Um remetente do lembrete de consulta (CRM#218)
 
@@ -214,10 +215,41 @@ O setup do CRM escolhe quem envia o lembrete de consulta de cada clínica (o app
 
 O setup do CRM gera, na hora do clique, um link curto e assinado para o setup daqui:
 
-- **Token:** `base64url(JSON do payload) + "." + base64url(HMAC-SHA256(SETUP_LINK_SEGREDO, payload já codificado))`, com o payload `{ "v": 1, "tipo": "setup", "companyId": "<uuid>" | null, "exp": <unix segundos> }` e 120 segundos de validade. No CRM, o segredo é o `BOTAO_SETUP_SEGREDO`.
-- **A rota** confere a assinatura em tempo constante, o `v`, o `tipo` e a validade, grava o cookie `sb_setup_sessao` (8 horas, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) e leva ao `/setup`, já na clínica do `companyId` (`/setup?clinica=<companyId>`). Link inválido ou vencido: `/setup?aviso=link_invalido`, sem dizer o motivo. Sem `SETUP_LINK_SEGREDO`: `503`.
+- **Token v 2 (Ed25519, o padrão quando o CRM tem `BOTAO_SETUP_CHAVE_PRIVADA`):** `base64url(JSON do payload) + "." + base64url(assinatura Ed25519 sobre o payload já codificado)`, com o payload `{ "v": 2, "tipo": "setup", "companyId": "<uuid>" | null, "exp": <unix segundos> }` e 120 segundos de validade. O CRM assina com a chave privada; aqui só mora a chave pública, na linha `setup_link_chave_publica` da tabela `configuracao_do_servidor`, conferida com `crypto.verify` do Node.
+- **Token v 1 (HMAC, enquanto `SETUP_LINK_SEGREDO` existir):** `base64url(JSON do payload) + "." + base64url(HMAC-SHA256(SETUP_LINK_SEGREDO, payload já codificado))`, com `"v": 1` no mesmo payload. No CRM, o segredo é o `BOTAO_SETUP_SEGREDO`.
+- **A rota** confere a assinatura em tempo constante, o `v`, o `tipo` e a validade, grava o cookie `sb_setup_sessao` (8 horas, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) e leva ao `/setup`, já na clínica do `companyId` (`/setup?clinica=<companyId>`). Link inválido ou vencido: `/setup?aviso=link_invalido`, sem dizer o motivo. Sem `SETUP_LINK_SEGREDO` e sem a chave pública na tabela: `503`.
+- **O cookie da sessão** é assinado com o `SETUP_LINK_SEGREDO`; sem ele, com uma chave derivada da `SUPABASE_SERVICE_KEY` (HMAC-SHA256 com um rótulo fixo), que o servidor já tem. Trocar a service key só encerra as sessões abertas.
 - **As rotas admin** aceitam a senha (`x-admin-key`) ou o cookie. `SETUP_SENHA_DESLIGADA=1` (ou `true`) desliga a senha, e a tela de entrar diz para abrir pelo setup do CRM. Desligar em produção só com OK da equipe.
-- Teste: `api/_setup-token.test.js`.
+- Teste: `api/_setup-token.test.js` (v 1) e `api/_setup-link-v2.test.js` (v 2).
+
+### Configuração sem segredo na Vercel (`configuracao_do_servidor`, CRM#217 e CRM#219)
+
+Ninguém precisa criar variável nova na Vercel para o provisionamento nem para o link do setup. O que o botão precisa saber fica na tabela `public.configuracao_do_servidor` (`chave`, `valor`, `atualizado_em`), com RLS ligado e nenhuma política: só a service role, que o servidor daqui já usa, lê e grava. Nenhum valor dela é segredo:
+
+| `chave` | `valor` | Para quê |
+|---|---|---|
+| `provisionamento_sha256` | sha256 em hex (64 caracteres) da chave do provisionamento | sem `CHAVE_DE_PROVISIONAMENTO`, o `POST /api/provisionamento` compara o sha256 do Bearer com ele, em tempo constante |
+| `setup_link_chave_publica` | chave pública Ed25519, SPKI em DER codificado em base64, numa linha (PEM também é aceito) | confere o link de setup v 2, que o CRM assina com a `BOTAO_SETUP_CHAVE_PRIVADA` |
+
+O servidor guarda cada leitura por 60 segundos em memória: uma troca na tabela vale em até um minuto. As variáveis, quando existem, continuam valendo: `CHAVE_DE_PROVISIONAMENTO` ganha da linha `provisionamento_sha256`, e `SETUP_LINK_SEGREDO` mantém o link v 1 ao lado do v 2.
+
+**A ordem para ligar** (cada passo em produção só com OK da equipe):
+
+1. Aplicar `supabase/migrations/20261008180000_configuracao_do_servidor.sql` no projeto Schedule-button-v2 (e a `20261008120000_provisionamento_pelo_crm.sql`, se ainda não estiver).
+2. No CRM, gerar o par Ed25519 e a chave do provisionamento (os comandos estão no `docs/deploy-vps.md` do CRM). A chave privada e a chave do provisionamento ficam só no `.env` do CRM.
+3. Gravar a chave pública e o sha256 da chave do provisionamento aqui, pelo SQL editor do Supabase (como service role):
+
+```sql
+insert into public.configuracao_do_servidor (chave, valor) values
+  ('setup_link_chave_publica', '<a chave pública: SPKI em DER, em base64, uma linha>'),
+  ('provisionamento_sha256', '<sha256 em hex da BOTAO_CHAVE_DE_PROVISIONAMENTO do CRM>')
+on conflict (chave) do update set valor = excluded.valor, atualizado_em = now();
+```
+
+4. Só então pôr `BOTAO_SETUP_CHAVE_PRIVADA` e `BOTAO_CHAVE_DE_PROVISIONAMENTO` no `.env` do CRM e recriar os containers dele. Antes da linha aqui, o link v 2 cairia em "link inválido" e o provisionamento em `503`.
+5. Conferir: o "Abrir o setup do Schedule Button" no setup do CRM abre o `/setup` daqui, e o estado do último envio ao botão fica "em dia".
+
+O sha256 é o da chave exata, sem quebra de linha no fim: `printf %s "$BOTAO_CHAVE_DE_PROVISIONAMENTO" | sha256sum`.
 
 ---
 
@@ -393,10 +425,12 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 - Opcionais: `CRM_API_URL` e `EMBED_HOSTS` (hosts aceitos além do próprio app, separados
   por vírgula, ex. `app.fluxodonto.com`; vazio = só o próprio app, que é o que o botão usa)
 - Setup unificado (a equipe preenche, ver `.env.example`):
-  - `CHAVE_DE_PROVISIONAMENTO`: a chave de serviço do `POST /api/provisionamento`, igual à
-    `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM (vazia = 503);
-  - `SETUP_LINK_SEGREDO`: o segredo do link assinado do setup, igual ao `BOTAO_SETUP_SEGREDO`
-    do CRM (vazio = 503 no `/api/setup/entrar` e só a senha entra);
+  - nenhuma é obrigatória: sem elas, o botão lê a tabela `configuracao_do_servidor` (ver
+    "Configuração sem segredo na Vercel");
+  - `CHAVE_DE_PROVISIONAMENTO` (opcional): a chave de serviço do `POST /api/provisionamento`,
+    igual à `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM; ganha da linha `provisionamento_sha256`;
+  - `SETUP_LINK_SEGREDO` (opcional): o segredo do link v 1, igual ao `BOTAO_SETUP_SEGREDO`
+    do CRM; sem ele, só o link v 2 (chave pública na tabela) e a senha entram;
   - `SETUP_SENHA_DESLIGADA`: `1` ou `true` desligam a entrada por senha (só com OK da equipe).
 
 ---
@@ -415,6 +449,7 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 - O setup mostra só para leitura o que vem do CRM
 - **Um remetente do lembrete de consulta** (CRM#218): na clínica provisionada, o botão só agenda o lembrete quando o CRM o escolheu
 - **Link assinado do setup** (CRM#219) em `GET /api/setup/entrar?t=`, com `SETUP_LINK_SEGREDO`, e `SETUP_SENHA_DESLIGADA` para desligar a senha
+- **Sem segredo na Vercel** (CRM#217, CRM#219): a tabela `configuracao_do_servidor` (migração `20261008180000_configuracao_do_servidor.sql`, não aplicada) guarda o sha256 da chave do provisionamento e a chave pública do link de setup v 2, assinado com Ed25519
 
 ### 2026-10-07 — Rotas do operador fechadas
 

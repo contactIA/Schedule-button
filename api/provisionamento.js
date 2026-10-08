@@ -1,10 +1,15 @@
 import { getSupabase } from './_supabase.js'
-import { safeEqual } from './_setup-token.js'
+import { safeEqual, matchesSha256Hex } from './_setup-token.js'
+import { getConfig, CONFIG_KEYS } from './_configuracao.js'
 import { validateSnapshot, applySnapshot } from './_provisionamento.js'
 
 // POST /api/provisionamento: o worker do CRM entrega o retrato da clínica
 // (CRM#217). Chave de serviço em Authorization: Bearer, igual à
-// BOTAO_CHAVE_DE_PROVISIONAMENTO do CRM. Sem CHAVE_DE_PROVISIONAMENTO: 503.
+// BOTAO_CHAVE_DE_PROVISIONAMENTO do CRM. A chave se confere de um de dois jeitos:
+// · com a variável CHAVE_DE_PROVISIONAMENTO, contra ela (como sempre foi);
+// · sem ela, contra o sha256 em hex da chave, guardado na linha
+//   'provisionamento_sha256' de public.configuracao_do_servidor (cache de 60 s).
+// Sem a variável e sem a linha: 503.
 
 function supabaseRepo(db) {
   const must = ({ data, error }, what) => {
@@ -49,16 +54,35 @@ function parseBody(body) {
   try { return JSON.parse(body) } catch { return undefined }
 }
 
-export function makeProvisionamentoHandler({ env = process.env, repo = null } = {}) {
+const SEM_CHAVE = { erro: 'Provisionamento não configurado no botão.', codigo: 'provisionamento_nao_configurado' }
+
+// true ou false, ou o corpo de um 503.
+async function checkKey(given, env, config) {
+  const expected = env.CHAVE_DE_PROVISIONAMENTO
+  if (expected) return Boolean(given) && safeEqual(given, expected)
+
+  let hash
+  try {
+    hash = await config(CONFIG_KEYS.PROVISIONAMENTO_SHA256)
+  } catch (err) {
+    console.error(`[provisionamento] configuração indisponível | ${err.message}`)
+    return { erro: 'Configuração do botão indisponível.', codigo: 'configuracao_indisponivel' }
+  }
+  if (!hash) return SEM_CHAVE
+  if (!/^[0-9a-f]{64}$/i.test(hash)) {
+    console.error('[provisionamento] a linha provisionamento_sha256 não é um sha256 em hex')
+    return SEM_CHAVE
+  }
+  return Boolean(given) && matchesSha256Hex(given, hash)
+}
+
+export function makeProvisionamentoHandler({ env = process.env, repo = null, config = getConfig } = {}) {
   return async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido.', codigo: 'metodo_nao_permitido' })
 
-    const expected = env.CHAVE_DE_PROVISIONAMENTO
-    if (!expected) {
-      return res.status(503).json({ erro: 'Provisionamento não configurado no botão.', codigo: 'provisionamento_nao_configurado' })
-    }
-    const given = bearer(req)
-    if (!given || !safeEqual(given, expected)) {
+    const ok = await checkKey(bearer(req), env, config)
+    if (typeof ok === 'object') return res.status(503).json(ok)
+    if (!ok) {
       return res.status(401).json({ erro: 'Chave de provisionamento inválida.', codigo: 'chave_invalida' })
     }
 

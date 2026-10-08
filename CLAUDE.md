@@ -70,11 +70,15 @@ Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `pr
 | Espelho no CRM por clínica/unidade | Supabase `clinics.crm_enabled`, `units.crm_unit_id` (Setup) |
 | Endereço da API do CRM | env var `CRM_API_URL` (opcional; padrão `https://crm.contactia.com.br/api/v1`) |
 | Hosts aceitos além do próprio app | env var `EMBED_HOSTS` (opcional, vírgula; vazio = só o próprio app) |
-| Chave de serviço do provisionamento | env var `CHAVE_DE_PROVISIONAMENTO` (= `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM; vazia = 503) |
-| Segredo do link do setup | env var `SETUP_LINK_SEGREDO` (= `BOTAO_SETUP_SEGREDO` do CRM; vazio = 503 no link) |
+| Chave de serviço do provisionamento | Supabase `configuracao_do_servidor` linha `provisionamento_sha256` (sha256 em hex da `BOTAO_CHAVE_DE_PROVISIONAMENTO` do CRM), ou a env var opcional `CHAVE_DE_PROVISIONAMENTO`, que ganha; sem as duas = 503 |
+| Chave pública do link do setup (v 2, Ed25519) | Supabase `configuracao_do_servidor` linha `setup_link_chave_publica` (SPKI em DER, base64; PEM também vale). A privada é a `BOTAO_SETUP_CHAVE_PRIVADA` do CRM |
+| Segredo do link do setup (v 1, HMAC) | env var opcional `SETUP_LINK_SEGREDO` (= `BOTAO_SETUP_SEGREDO` do CRM); sem ela e sem a chave pública = 503 no link |
+| Assinatura do cookie da sessão de setup | `SETUP_LINK_SEGREDO`, ou, sem ele, chave derivada da `SUPABASE_SERVICE_KEY` |
 | Desligar a senha do setup | env var `SETUP_SENHA_DESLIGADA` (`1` ou `true`; só com OK da equipe) |
 
 A clínica é identificada por `?idconta=` (companyId da conta Helena → `clinics.helena_account_id`).
+
+`public.configuracao_do_servidor` (`chave`, `valor`, `atualizado_em`) guarda configuração que **não é segredo**, para não depender de variável na Vercel. RLS ligado e nenhuma política: só a service role lê e grava. A leitura passa por `getConfig` de `api/_configuracao.js`, com cache de 60 s. Segredo (chave aberta, chave privada) nunca entra nela. A ordem para ligar: aplicar a migração `20261008180000_configuracao_do_servidor.sql`, gravar as duas linhas e só depois pôr `BOTAO_SETUP_CHAVE_PRIVADA` e `BOTAO_CHAVE_DE_PROVISIONAMENTO` no CRM (README, "Configuração sem segredo na Vercel").
 
 ---
 

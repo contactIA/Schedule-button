@@ -126,15 +126,16 @@ O `slug` é gerado automaticamente no onboarding a partir do nome da clínica (l
 A equipe configura quatro produtos em cada clínica, cada um com um setup e uma senha. O setup do CRM passou a ser o único, e o cadastro comum (a clínica, o token da plataforma, as unidades com o Clinicorp) mora no CRM. O botão está em outro Supabase e na Vercel, então não lê o banco do CRM: recebe uma cópia.
 
 ### Decisão
-1. **Provisionamento (CRM#217).** O worker do CRM manda o retrato inteiro da clínica em `POST /api/provisionamento`, com a chave de serviço `CHAVE_DE_PROVISIONAMENTO`, e tenta de novo se falhar. O botão grava em `clinics` (pelo `helena_account_id`) e em `units` (pelo `crm_unit_id`) e continua sem depender do CRM para agendar. O último envio vence; um retrato mais velho que o aplicado (`clinics.provisionado_em`) é ignorado.
+1. **Provisionamento (CRM#217).** O worker do CRM manda o retrato inteiro da clínica em `POST /api/provisionamento`, com uma chave de serviço (conferida pela variável `CHAVE_DE_PROVISIONAMENTO` ou, sem ela, pelo sha256 na tabela `configuracao_do_servidor`), e tenta de novo se falhar. O botão grava em `clinics` (pelo `helena_account_id`) e em `units` (pelo `crm_unit_id`) e continua sem depender do CRM para agendar. O último envio vence; um retrato mais velho que o aplicado (`clinics.provisionado_em`) é ignorado.
 2. **O que vem do CRM fica só para leitura no setup daqui.** Os painéis, as etapas, as etiquetas e as mensagens do lembrete continuam editáveis aqui até a decisão #212 do CRM.
 3. **Um remetente do lembrete de consulta (CRM#218).** Na clínica provisionada, o `scheduled_message` só agenda quando o CRM escolheu o botão (`clinics.envia_lembrete_de_consulta`). A clínica que não veio do CRM segue como antes.
-4. **Uma senha só (CRM#219).** O setup do CRM abre o setup daqui por `GET /api/setup/entrar?t=`, um link assinado (HMAC-SHA256 com `SETUP_LINK_SEGREDO`) de 120 segundos, que grava um cookie de sessão de setup (8 horas, `HttpOnly`, `SameSite=Strict`, só em `/api`). A senha `ADMIN_PASSWORD` continua valendo até `SETUP_SENHA_DESLIGADA=1`, que só se liga com OK da equipe.
+4. **Uma senha só (CRM#219).** O setup do CRM abre o setup daqui por `GET /api/setup/entrar?t=`, um link assinado de 120 segundos (v 2: Ed25519, com a chave pública na tabela `configuracao_do_servidor`; v 1: HMAC-SHA256 com `SETUP_LINK_SEGREDO`, enquanto a variável existir), que grava um cookie de sessão de setup (8 horas, `HttpOnly`, `SameSite=Strict`, só em `/api`). A senha `ADMIN_PASSWORD` continua valendo até `SETUP_SENHA_DESLIGADA=1`, que só se liga com OK da equipe.
 
 ### Consequências
 - As clínicas que já estão aqui são casadas pela conta na plataforma. Na primeira vez, a unidade que já existe aqui é adotada quando é o mesmo negócio do Clinicorp (`clinicorp_business_id`) ou tem o mesmo nome; a que não casar fica como está, ativa, até a equipe tirá-la.
 - A clínica nova que chega pelo CRM ainda não tem painel: não carrega no botão até alguém escolher o painel no setup daqui.
 - A migração `supabase/migrations/20261008120000_provisionamento_pelo_crm.sql` precisa estar aplicada antes de o CRM ligar o envio.
+- Nada disso exige variável nova na Vercel: o que o botão precisa saber e não é segredo (o sha256 da chave do provisionamento, a chave pública do link) fica em `public.configuracao_do_servidor`, com RLS e só a service role (migração `20261008180000_configuracao_do_servidor.sql`). Os segredos ficam só no CRM.
 
 ---
 
