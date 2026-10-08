@@ -1,6 +1,6 @@
 import { getClinicByAccountId } from './_supabase.js'
 import { requireAllowedOrigin } from './_origin.js'
-import { normalizeScheduledMessage } from './_scheduled-message.js'
+import { clinicScheduledMessage } from './_scheduled-message.js'
 
 const BASE = 'https://api.wts.chat'
 
@@ -31,7 +31,7 @@ function isCardUpdate(body) {
 function isConfiguredReminder(body, clinic) {
   if (!hasOnlyKeys(body, REMINDER_KEYS)) return false
   if (body.type !== 'TEMPLATE' || !body.templateId) return false
-  const messages = normalizeScheduledMessage(clinic.scheduled_message)?.messages ?? []
+  const messages = clinicScheduledMessage(clinic)?.messages ?? []
   return messages.some(m => m.templateId === body.templateId && (m.channelFrom || null) === (body.from || null))
 }
 
