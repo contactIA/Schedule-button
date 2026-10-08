@@ -15,7 +15,12 @@
 -- A clínica nova que chega pelo CRM ainda não tem painel nem, às vezes, token
 -- da plataforma: o painel se escolhe no setup daqui (decisão #212 em aberto).
 -- Por isso estas três colunas deixam de ser obrigatórias. A clínica sem painel
--- não carrega no botão (o /api/clinic responde not_registered).
+-- ou sem token não carrega no botão (o /api/clinic responde not_registered).
+--
+-- Duas entregas ao mesmo tempo não duplicam a clínica: o banco de produção já
+-- tem o índice único clinics_helena_account_id_key (helena_account_id), criado
+-- fora destas migrações. A segunda entrega falha com 500 e a nova tentativa do
+-- worker encontra a clínica e atualiza.
 
 alter table public.clinics
   add column if not exists provisionado_em timestamptz,
