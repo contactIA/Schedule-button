@@ -12,6 +12,7 @@ const SECRET = 'segredo-do-link-de-teste'
 const NOW = Date.UTC(2026, 9, 8, 12, 0, 0)
 const nowS = Math.floor(NOW / 1000)
 const COMPANY = '0b6c1d9e-2f3a-4b5c-8d7e-9f0a1b2c3d4e'
+const semConfig = async () => null
 const link = (over = {}) => ({ v: 1, tipo: 'setup', companyId: COMPANY, exp: nowS + 120, ...over })
 
 function fakeRes() {
@@ -64,9 +65,9 @@ test('tipo e versão: só v 1 e tipo setup; a sessão não vale como link', () =
   assert.equal(verifyToken(signToken(link(), SECRET), SECRET, { type: 'sessao_setup', now: NOW }), null)
 })
 
-test('a rota abre a sessão e leva à clínica do link', () => {
+test('a rota abre a sessão e leva à clínica do link', async () => {
   const res = fakeRes()
-  makeEntrarHandler({ env: { SETUP_LINK_SEGREDO: SECRET }, now: () => NOW })(
+  await makeEntrarHandler({ env: { SETUP_LINK_SEGREDO: SECRET }, now: () => NOW, config: semConfig })(
     { method: 'GET', query: { t: signToken(link(), SECRET) }, headers: {} }, res)
   assert.equal(res.statusCode, 302)
   assert.equal(res.headers.Location, `/setup?clinica=${COMPANY}`)
@@ -82,18 +83,18 @@ test('a rota abre a sessão e leva à clínica do link', () => {
   assert.equal(hasValidSession({ headers: { cookie: value } }, 'outro', NOW), false)
 })
 
-test('link inválido leva à tela de entrar com aviso e sem cookie', () => {
+test('link inválido leva à tela de entrar com aviso e sem cookie', async () => {
   const res = fakeRes()
-  makeEntrarHandler({ env: { SETUP_LINK_SEGREDO: SECRET }, now: () => NOW })(
+  await makeEntrarHandler({ env: { SETUP_LINK_SEGREDO: SECRET }, now: () => NOW, config: semConfig })(
     { method: 'GET', query: { t: signToken(link({ exp: nowS - 5 }), SECRET) }, headers: {} }, res)
   assert.equal(res.statusCode, 302)
   assert.equal(res.headers.Location, '/setup?aviso=link_invalido')
   assert.equal(res.headers['Set-Cookie'], undefined)
 })
 
-test('sem SETUP_LINK_SEGREDO a rota responde 503', () => {
+test('sem SETUP_LINK_SEGREDO e sem a chave pública a rota responde 503', async () => {
   const res = fakeRes()
-  makeEntrarHandler({ env: {}, now: () => NOW })({ method: 'GET', query: { t: 'x.y' }, headers: {} }, res)
+  await makeEntrarHandler({ env: { SUPABASE_SERVICE_KEY: 'service' }, now: () => NOW, config: semConfig })({ method: 'GET', query: { t: 'x.y' }, headers: {} }, res)
   assert.equal(res.statusCode, 503)
 })
 
