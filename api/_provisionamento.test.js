@@ -105,6 +105,24 @@ test('clínica que já existe aqui: atualiza pelo helena_account_id e adota a un
   assert.equal(repo.db.units[0].name, 'Unidade Centro')
 })
 
+test('retrato sem subscriberId nem codeLink mantém os da unidade adotada; na nova, o padrão', async () => {
+  const semExtras = { usuario: 'clin', token: 'tok-clinicorp', businessId: 123 }
+  const repo = memoryRepo({
+    clinics: [{ id: 'c-old', helena_account_id: COMPANY, name: 'Antigo', helena_token: 'tok-velho', active: true }],
+    units: [{ id: 'u-old', clinic_id: 'c-old', name: 'Matriz', clinicorp_user: 'clin', clinicorp_subscriber_id: 'sub-real', clinicorp_business_id: 123, clinicorp_code_link: '77', crm_unit_id: null, active: true }],
+  })
+  await applySnapshot(repo, snap({ unidades: [
+    unidade({ clinicorp: semExtras }),
+    unidade({ crmUnitId: U2, nome: 'Unidade Sul', principal: false, clinicorp: { ...semExtras, usuario: 'sul', businessId: 456 } }),
+  ] }))
+  const velha = repo.db.units.find(u => u.id === 'u-old')
+  assert.equal(velha.clinicorp_subscriber_id, 'sub-real')
+  assert.equal(velha.clinicorp_code_link, '77')
+  const nova = repo.db.units.find(u => u.crm_unit_id === U2)
+  assert.equal(nova.clinicorp_subscriber_id, 'sul')
+  assert.equal(nova.clinicorp_code_link, '0')
+})
+
 test('unidade provisionada que não veio mais é desativada; a cadastrada à mão fica', async () => {
   const repo = memoryRepo()
   await applySnapshot(repo, snap({ unidades: [unidade(), unidade({ crmUnitId: U2, nome: 'Bueno', principal: false, clinicorp: { ...unidade().clinicorp, businessId: 456 } })] }))

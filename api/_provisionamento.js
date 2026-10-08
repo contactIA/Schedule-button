@@ -59,9 +59,10 @@ function validateUnit(u, i) {
       clinicorp: {
         usuario: c.usuario.trim(),
         token: c.token.trim(),
-        subscriberId: (c.subscriberId?.trim() || c.usuario.trim()),
+        // Ausentes: null, e applySnapshot decide (mantém o da unidade adotada)
+        subscriberId: c.subscriberId?.trim() || null,
         businessId,
-        codeLink: c.codeLink == null || String(c.codeLink).trim() === '' ? '0' : String(c.codeLink).trim(),
+        codeLink: c.codeLink == null || String(c.codeLink).trim() === '' ? null : String(c.codeLink).trim(),
       },
       // Mesmo formato do setup daqui: ids do Clinicorp em texto; lista vazia =
       // todos agendáveis (null no banco)
@@ -189,9 +190,13 @@ export async function applySnapshot(repo, snap) {
       position: i,
       clinicorp_user: u.clinicorp.usuario,
       clinicorp_token: u.clinicorp.token,
-      clinicorp_subscriber_id: u.clinicorp.subscriberId,
+      // Sem subscriberId ou codeLink no retrato, fica o da unidade adotada
+      // (o code_link é o que lista os horários); senão, o padrão do setup daqui
+      clinicorp_subscriber_id: u.clinicorp.subscriberId ||
+        (match?.clinicorp_user === u.clinicorp.usuario && match?.clinicorp_subscriber_id) || u.clinicorp.usuario,
       clinicorp_business_id: u.clinicorp.businessId,
-      clinicorp_code_link: u.clinicorp.codeLink,
+      clinicorp_code_link: u.clinicorp.codeLink ||
+        (Number(match?.clinicorp_business_id) === u.clinicorp.businessId && match?.clinicorp_code_link) || '0',
       bookable_professional_ids: u.bookableIds.length > 0 ? u.bookableIds : null,
       crm_unit_id: u.crmUnitId,
       active: u.ativa,
