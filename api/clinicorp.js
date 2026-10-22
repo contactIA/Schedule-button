@@ -71,8 +71,10 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(404).json({ error: err.message })
   }
+  // Sem credencial do Clinicorp: os horários e a consulta saem do /api/agenda
+  if (unit.agenda) return res.status(400).json({ error: 'Esta unidade agenda na agenda do CRM, não no Clinicorp.' })
 
-  const auth         = 'Basic ' + Buffer.from(`${unit.clinicorp_user}:${unit.clinicorp_token}`).toString('base64')
+  const auth        = 'Basic ' + Buffer.from(`${unit.clinicorp_user}:${unit.clinicorp_token}`).toString('base64')
   const subscriberId = unit.clinicorp_subscriber_id
   const businessId   = unit.clinicorp_business_id
   const codeLink     = unit.clinicorp_code_link

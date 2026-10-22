@@ -4,6 +4,7 @@ import {
   updateCardStep, addCardNote, getPanelData, scheduleReminder
 } from './services/helena'
 import { fetchClinicorpSlots, fetchClinicorpDays, fetchClinicorpHistory, scheduleClinicorp } from './services/clinicorp'
+import { fetchAgendaDays, fetchAgendaSlots, scheduleAgenda } from './services/agenda'
 import { syncCrmCard } from './services/crm'
 import Calendar from './components/Calendar'
 import SlotPicker from './components/SlotPicker'
@@ -148,6 +149,8 @@ function App() {
   const activeUnit = clinicConfig?.units?.find(u => u.id === selectedUnitId)
     ?? clinicConfig?.units?.[0]
     ?? null
+  // Unidade sem o Clinicorp que marca na agenda do CRM (CRM#302)
+  const onAgenda = activeUnit?.agenda === true
 
   // Painel ativo é derivado da unidade selecionada — sem seletor no runtime
   // (unidade → panelId configurado no onboarding, ou painel padrão da clínica)
@@ -243,7 +246,8 @@ function App() {
   // ── Histórico do paciente — busca com debounce pelo telefone ──
   useEffect(() => {
     const digits = telefone.replace(/\D/g, '')
-    const valid  = digits.length >= 10 && !!clinicConfig
+    // O histórico vem do Clinicorp; a unidade da agenda do CRM ainda não tem
+    const valid  = digits.length >= 10 && !!clinicConfig && !onAgenda
     const timer = setTimeout(() => {
       if (!valid) {
         setHistory(null)
@@ -260,11 +264,12 @@ function App() {
         .finally(() => setHistoryLoading(false))
     }, valid ? 700 : 0)
     return () => clearTimeout(timer)
-  }, [telefone, clinicConfig, activeUnit?.id])
+  }, [telefone, clinicConfig, activeUnit?.id, onAgenda])
 
   // ── Dias com agenda aberta — carregado ao entrar no calendário ──
-  const loadAvailability = (unitId) => {
-    fetchClinicorpDays(idconta, unitId)
+  const loadAvailability = (unit) => {
+    const fetchDays = unit?.agenda ? fetchAgendaDays : fetchClinicorpDays
+    fetchDays(idconta, unit?.id)
       .then(dates => {
         if (!dates.length) { setAvailability(null); return }
         const sorted = [...dates].sort()
@@ -272,7 +277,7 @@ function App() {
       })
       // Sem dado de disponibilidade → calendário segue todo clicável
       .catch(err => {
-        console.warn('[Clinicorp] Dias disponíveis indisponíveis:', err.message)
+        console.warn('[Agenda] Dias disponíveis indisponíveis:', err.message)
         setAvailability(null)
       })
   }
@@ -282,7 +287,8 @@ function App() {
     setSlotsLoading(true)
     setSlotsError(null)
     setAvailableSlots([])
-    fetchClinicorpSlots(dateStr, idconta, activeUnit?.id)
+    const fetchSlots = onAgenda ? fetchAgendaSlots : fetchClinicorpSlots
+    fetchSlots(dateStr, idconta, activeUnit?.id)
       .then(slots => setAvailableSlots(slots))
       .catch(err => setSlotsError(err.message))
       .finally(() => setSlotsLoading(false))
@@ -317,7 +323,7 @@ function App() {
     e.preventDefault()
     if (!nome.trim()) return
     if (phonePrivate && !telefone.trim()) return
-    loadAvailability(activeUnit?.id)
+    loadAvailability(activeUnit)
     setUiStep(2)
   }
 
@@ -366,17 +372,19 @@ function App() {
     if (!nome.trim()) return
     setLoading(true)
     setMessage(null)
+    // A consulta já marcada na agenda do CRM, para o erro que vier depois dela
+    let agendaOk = false
 
     try {
       const stepName = steps.find(s => s.id === effectiveAgendadoStepId)?.name ?? 'Agendado'
+      const booking  = !!(selectedDate && selectedSlot)
 
       let finalDescription = descricao.trim()
-      if (selectedDate && selectedSlot) {
+      if (booking) {
         const line = `Agendamento: ${selectedDate} às ${selectedSlot.from}`
         finalDescription = line + (finalDescription ? `\n\nObservações:\n${finalDescription}` : '')
       }
 
-      const card       = await findCardByContact(activeContactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
       const pickedTags  = [...selectedTagIds]
 
       // Campos personalizados de data do card: "Agendado em" (agora) e
@@ -390,8 +398,8 @@ function App() {
           toBrasiliaIso(selectedDate, selectedSlot.from)
       }
 
-      // Descrição do agendamento no Clinicorp: autoria (etiquetas escolhidas)
-      // + observações. As etiquetas identificam a CRC que agendou.
+      // Descrição do agendamento (Clinicorp ou agenda do CRM): autoria
+      // (etiquetas escolhidas) + observações. As etiquetas identificam a CRC.
       const tagLabels = pickedTags
         .map(id => panelTags.find(t => t.id === id)?.label)
         .filter(Boolean)
@@ -399,8 +407,33 @@ function App() {
         ? `Agendado por ${tagLabels.join(', ')} dentro da plataforma.`
         : 'Agendado pela plataforma.'
       const obs = descricao.trim()
-      const clinicorpNotes = authorLine + (obs ? ` Descrição: ${obs}` : '')
+      const appointmentNotes = authorLine + (obs ? ` Descrição: ${obs}` : '')
+      const crmNote = [finalDescription, authorLine].filter(Boolean).join('\n\n')
 
+      // Na unidade da agenda do CRM, a consulta vem antes do card e do
+      // lembrete: é a agenda que pode recusar o horário, e recusado nada muda.
+      // Ela cria (ou acha) o card do CRM e o leva a Agendados (CRM#302).
+      if (onAgenda && booking) {
+        try {
+          await scheduleAgenda({
+            patientName:     nome.trim(),
+            patientPhone:    telefone,
+            contactId:       activeContactId ?? null,
+            professionalId:  selectedSlot.professionalId,
+            start:           selectedSlot.start,
+            appointmentNote: appointmentNotes,
+            cardNote:        crmNote,
+          }, idconta, activeUnit.id)
+          agendaOk = true
+        } catch (err) {
+          setMessage({ type: 'error', text: `Não foi possível marcar na agenda: ${err.message}` })
+          setSelectedSlot(null)
+          loadSlots(selectedDate)
+          return
+        }
+      }
+
+      const card = await findCardByContact(activeContactId, idconta, activePanel?.id ?? clinicConfig.panelId).catch(() => null)
       if (card) {
         // Mescla com as etiquetas que o card já tem para não removê-las
         const mergedTags = pickedTags.length > 0
@@ -413,19 +446,22 @@ function App() {
       }
 
       // Espelho no CRM ContactIA, depois do painel nativo gravado. Desligado
-      // por clínica no servidor; nunca bloqueia nem desfaz o fluxo.
-      syncCrmCard({
-        idconta,
-        unitId:       activeUnit?.id ?? null,
-        phone:        telefone,
-        name:         nome.trim(),
-        contactId:    activeContactId ?? null,
-        scheduledFor: selectedDate && selectedSlot ? toBrasiliaIso(selectedDate, selectedSlot.from) : null,
-        note:         [finalDescription, authorLine].filter(Boolean).join('\n\n'),
-      })
+      // por clínica no servidor; nunca bloqueia nem desfaz o fluxo. A consulta
+      // da agenda do CRM já levou o card: mover de novo encaixaria outra.
+      if (!agendaOk) {
+        syncCrmCard({
+          idconta,
+          unitId:       activeUnit?.id ?? null,
+          phone:        telefone,
+          name:         nome.trim(),
+          contactId:    activeContactId ?? null,
+          scheduledFor: booking ? toBrasiliaIso(selectedDate, selectedSlot.from) : null,
+          note:         crmNote,
+        })
+      }
 
-      let clinicorpStatus = null
-      if (selectedDate && selectedSlot) {
+      let bookingStatus = agendaOk ? 'ok' : null
+      if (booking && !onAgenda) {
         try {
           await scheduleClinicorp({
             patientName:  nome.trim(),
@@ -434,20 +470,20 @@ function App() {
             dateLocal:    selectedDate,
             fromTime:     selectedSlot.from,
             toTime:       selectedSlot.to,
-            notes:        clinicorpNotes,
+            notes:        appointmentNotes,
           }, idconta, activeUnit?.id)
-          clinicorpStatus = 'ok'
+          bookingStatus = 'ok'
         } catch (err) {
-          clinicorpStatus = err.message
+          bookingStatus = err.message
         }
       }
 
-      // Lembrete agendado — só após Clinicorp confirmado; falha nunca desfaz nada
+      // Lembrete agendado — só após a consulta confirmada; falha nunca desfaz nada
       let reminderStatus = null
       const reminderCfg  = clinicConfig?.scheduledMessage
       const reminderMsgs = reminderCfg?.messages ?? []
       const reminderMsg  = reminderMsgs.find(m => m.id === selectedReminderId) ?? reminderMsgs[0]
-      if (sendReminder && clinicorpStatus === 'ok' && reminderCfg?.enabled && reminderMsg) {
+      if (sendReminder && bookingStatus === 'ok' && reminderCfg?.enabled && reminderMsg) {
         const patientName   = (reminderName ?? nome).trim()
         const schedulingIso = reminderScheduling(reminderMsg.timing, selectedDate, selectedSlot.from)
         try {
@@ -487,16 +523,17 @@ function App() {
         ? `Card movido para "${stepName}" com sucesso!`
         : `Card criado em "${stepName}" com sucesso!`
 
-      if (clinicorpStatus === 'ok' && reminderStatus && reminderStatus !== 'ok') {
+      if (bookingStatus === 'ok' && reminderStatus && reminderStatus !== 'ok') {
         setMessage({
           type: 'warning',
           text: `${baseText} Agendamento confirmado, mas o lembrete não foi programado: ${reminderStatus}`,
         })
-      } else if (clinicorpStatus === 'ok') {
+      } else if (bookingStatus === 'ok') {
         const reminderNote = reminderStatus === 'ok' ? ' Lembrete programado.' : ''
-        setMessage({ type: 'success', text: baseText + ' Agendamento no Clinicorp confirmado.' + reminderNote })
-      } else if (clinicorpStatus) {
-        setMessage({ type: 'error', text: `${baseText}\n\nErro no Clinicorp: ${clinicorpStatus}` })
+        const bookedNote   = agendaOk ? ' Consulta marcada na agenda.' : ' Agendamento no Clinicorp confirmado.'
+        setMessage({ type: 'success', text: baseText + bookedNote + reminderNote })
+      } else if (bookingStatus) {
+        setMessage({ type: 'error', text: `${baseText}\n\nErro no Clinicorp: ${bookingStatus}` })
       } else {
         setMessage({ type: 'success', text: baseText })
       }
@@ -512,10 +549,16 @@ function App() {
       setSelectedReminderId(null)
       setSendReminder(true)
       setReminderName(null)
-      const hadIssue = (clinicorpStatus && clinicorpStatus !== 'ok') || (reminderStatus && reminderStatus !== 'ok')
+      const hadIssue = (bookingStatus && bookingStatus !== 'ok') || (reminderStatus && reminderStatus !== 'ok')
       setTimeout(() => setMessage(null), hadIssue ? 12000 : 6000)
     } catch (err) {
-      setMessage({ type: 'error', text: err.message })
+      if (agendaOk) {
+        // A consulta ficou: sem o horário escolhido, um novo clique não marca outra
+        setSelectedSlot(null)
+        setMessage({ type: 'error', text: `Consulta marcada na agenda, mas o card da plataforma não foi gravado: ${err.message}` })
+      } else {
+        setMessage({ type: 'error', text: err.message })
+      }
     } finally {
       setLoading(false)
     }
@@ -767,12 +810,12 @@ function App() {
             </div>
           )}
 
-          {/* ── ETAPA 2: Calendário Clinicorp ── */}
+          {/* ── ETAPA 2: Calendário (Clinicorp ou agenda do CRM) ── */}
           {uiStep === 2 && (
             <div className="step-content">
               <div className="form-header">
                 <h3>Escolha o melhor horário</h3>
-                <p>Selecione uma data e um horário no Clinicorp.</p>
+                <p>Selecione uma data e um horário {onAgenda ? 'na agenda da clínica' : 'no Clinicorp'}.</p>
               </div>
 
               <div className="calendar-wrap">

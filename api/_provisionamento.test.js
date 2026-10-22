@@ -177,6 +177,58 @@ test('profissionais agendáveis vazios = todos (null), e a principal vem primeir
   assert.equal(u2.position, 1)
 })
 
+// A unidade sem o Clinicorp numa clínica com a agenda do CRM ligada (CRM#302)
+const daAgenda = (over = {}) => ({
+  crmUnitId: U2, nome: 'Unidade Sul', principal: false, ativa: true,
+  agenda: true, clinicorp: null, profissionaisAgendaveis: [],
+  ...over,
+})
+
+test('unidade da agenda do CRM: entra sem o Clinicorp, e a do Clinicorp grava agenda false', async () => {
+  const repo = memoryRepo()
+  await applySnapshot(repo, snap({ unidades: [unidade({ agenda: false }), daAgenda()] }))
+  const sul = repo.db.units.find(u => u.crm_unit_id === U2)
+  assert.equal(sul.agenda, true)
+  assert.equal(sul.active, true)
+  assert.equal(sul.name, 'Unidade Sul')
+  for (const coluna of ['clinicorp_user', 'clinicorp_token', 'clinicorp_subscriber_id', 'clinicorp_business_id', 'clinicorp_code_link', 'bookable_professional_ids']) {
+    assert.equal(sul[coluna], null, coluna)
+  }
+  const centro = repo.db.units.find(u => u.crm_unit_id === U1)
+  assert.equal(centro.agenda, false)
+  assert.equal(centro.clinicorp_business_id, 123)
+  assert.equal(repo.db.clinics[0].fuso_horario, 'America/Sao_Paulo')
+})
+
+test('o retrato de antes, sem o campo agenda, segue valendo como Clinicorp', async () => {
+  const repo = memoryRepo()
+  await applySnapshot(repo, snap())
+  assert.equal(repo.db.units[0].agenda, false)
+})
+
+test('unidade que deixa o Clinicorp pela agenda perde a credencial; a que volta, recebe', async () => {
+  const repo = memoryRepo()
+  await applySnapshot(repo, snap())
+  await applySnapshot(repo, snap({ enviadoEm: '2026-10-08T13:00:00.000Z', unidades: [daAgenda({ crmUnitId: U1, nome: 'Unidade Centro', principal: true })] }))
+  assert.equal(repo.db.units.length, 1)
+  assert.equal(repo.db.units[0].agenda, true)
+  assert.equal(repo.db.units[0].clinicorp_token, null)
+
+  await applySnapshot(repo, snap({ enviadoEm: '2026-10-08T14:00:00.000Z' }))
+  assert.equal(repo.db.units[0].agenda, false)
+  assert.equal(repo.db.units[0].clinicorp_token, 'tok-clinicorp')
+})
+
+test('unidade da agenda não adota a cadastrada aqui pelo business_id, que ela não tem', async () => {
+  const repo = memoryRepo({
+    clinics: [{ id: 'c-old', helena_account_id: COMPANY, name: 'Antigo', helena_token: 'tok', active: true }],
+    units: [{ id: 'u-old', clinic_id: 'c-old', name: 'Matriz', clinicorp_business_id: 123, crm_unit_id: null, active: true }],
+  })
+  await applySnapshot(repo, snap({ unidades: [daAgenda()] }))
+  assert.equal(repo.db.units.find(u => u.id === 'u-old').crm_unit_id, null)
+  assert.equal(repo.db.units.find(u => u.crm_unit_id === U2).agenda, true)
+})
+
 test('validação: recusa o que foge do contrato', () => {
   const casos = [
     [corpo({ versao: 2 }), 'versao_nao_suportada'],
@@ -186,6 +238,8 @@ test('validação: recusa o que foge do contrato', () => {
     [corpo({ enviaLembreteDeConsulta: undefined }), 'corpo_invalido'],
     [corpo({ crm: undefined }), 'corpo_invalido'],
     [corpo({ unidades: [unidade({ clinicorp: null })] }), 'unidade_sem_clinicorp'],
+    [corpo({ unidades: [unidade({ clinicorp: null, agenda: false })] }), 'unidade_sem_clinicorp'],
+    [corpo({ unidades: [daAgenda({ agenda: 'sim' })] }), 'corpo_invalido'],
     [corpo({ unidades: [unidade({ clinicorp: { ...unidade().clinicorp, businessId: null } })] }), 'unidade_sem_business_id'],
     [corpo({ unidades: [unidade(), unidade()] }), 'unidade_repetida'],
     [null, 'json_invalido'],

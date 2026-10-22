@@ -567,6 +567,8 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
   const isNew = !unit
   // Unidade provisionada pelo setup do CRM: tudo aqui só para leitura
   const readOnly = !!unit?.provisionado
+  // Sem o Clinicorp: agenda na agenda do CRM, que traz quem atende (CRM#302)
+  const onAgenda = unit?.agenda === true
   const [expanded,     setExpanded]     = useState(isNew)
   const [name,         setName]         = useState(unit?.name ?? '')
   const [user,         setUser]         = useState(unit?.clinicorpUser ?? '')
@@ -588,7 +590,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
   const crmUnits = crm?.units ?? null
 
   useEffect(() => {
-    if (!expanded || isNew || profList !== null) return
+    if (!expanded || isNew || onAgenda || profList !== null) return
     fetch(`/api/units?id=${unit.id}&professionals=1`, { headers: { 'x-admin-key': adminKey } })
       .then(async r => {
         const d = await r.json().catch(() => ({}))
@@ -709,10 +711,16 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
 
       {expanded && (
         <div className="unit-card-body">
-          {readOnly && (
+          {readOnly && !onAgenda && (
             <div className="crm-source-notice">
               Esta unidade vem do setup do CRM: nome, credencial do Clinicorp, profissionais
               agendáveis, unidade no CRM e status se editam lá.
+            </div>
+          )}
+          {onAgenda && (
+            <div className="crm-source-notice">
+              Esta unidade não usa o Clinicorp: o botão marca na agenda do CRM, de onde vêm os
+              dias, os horários e quem atende. Nome e status se editam no setup do CRM.
             </div>
           )}
           <div className="admin-field">
@@ -721,6 +729,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
               placeholder="Ex: Unidade Centro" disabled={readOnly} />
           </div>
 
+          {!onAgenda && (<>
           <div className="admin-field">
             <label>Usuário API Clinicorp *</label>
             <input type="text" value={user} onChange={e => setUser(e.target.value)}
@@ -796,6 +805,7 @@ function UnitEditor({ adminKey, clinicId, unit, crm, onSaved, onCancel, onDelete
               )}
             </div>
           )}
+          </>)}
 
           {!isNew && crm?.hasKey && !readOnly && (
             <div className="admin-field">

@@ -62,9 +62,17 @@ test('devolve a config da tela sem nenhum token nem credencial', async () => {
   // O que o front usa continua lá
   assert.equal(res.body.name, 'Prev')
   assert.equal(res.body.panelId, 'p1')
-  assert.deepEqual(res.body.units, [{ id: 'u1', name: 'Centro', position: 0, panelId: 'p1', agendadoStepId: 's2', steps: res.body.steps }])
+  assert.deepEqual(res.body.units, [{ id: 'u1', name: 'Centro', position: 0, agenda: false, panelId: 'p1', agendadoStepId: 's2', steps: res.body.steps }])
   assert.deepEqual(res.body.steps, [{ id: 's1', name: 'Novo' }, { id: 's2', name: 'Agendado' }])
   assert.equal(res.body.scheduledMessage.messages[0].templateId, 'tpl-1')
+})
+
+test('a unidade da agenda do CRM vai à tela com agenda: true, e a chave do CRM não sai (CRM#302)', async () => {
+  const daAgenda = { id: 'u2', clinic_id: 'c1', name: 'Sul', position: 1, active: true, agenda: true, crm_unit_id: 'crm-u2' }
+  const res = fakeRes()
+  await makeClinicHandler({ loadClinic: async () => ({ ...clinic, units: [...clinic.units, daAgenda] }) })(req(), res)
+  assert.deepEqual(res.body.units.map(u => [u.id, u.agenda]), [['u1', false], ['u2', true]])
+  assert.equal(JSON.stringify(res.body).includes(SEGREDOS.crm_api_key), false)
 })
 
 test('recusa pedido de fora do app antes de ir ao banco', async () => {

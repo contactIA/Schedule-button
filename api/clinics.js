@@ -51,6 +51,7 @@ export default async function handler(req, res) {
             name:          u.name,
             active:        u.active,
             position:      u.position,
+            agenda:        u.agenda === true,
             clinicorpUser: u.clinicorp_user,
             subscriberId:  u.clinicorp_subscriber_id,
             businessId:    u.clinicorp_business_id,

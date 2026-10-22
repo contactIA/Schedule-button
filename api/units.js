@@ -13,6 +13,7 @@ function toClient(u) {
     name:          u.name,
     active:        u.active,
     position:      u.position,
+    agenda:        u.agenda === true,
     clinicorpUser: u.clinicorp_user,
     subscriberId:  u.clinicorp_subscriber_id,
     businessId:    u.clinicorp_business_id,
@@ -39,6 +40,8 @@ export default async function handler(req, res) {
     try {
       const { data: unit } = await db.from('units').select('*').eq('id', id).maybeSingle()
       if (!unit) return res.status(404).json({ error: 'Unidade não encontrada.' })
+      // Na unidade da agenda do CRM, quem atende vem de lá, não do Clinicorp
+      if (unit.agenda) return res.status(200).json({ professionals: [], bookableProfessionalIds: null })
 
       const result = {
         professionals: await fetchProfessionals(
