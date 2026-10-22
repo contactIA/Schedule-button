@@ -1,8 +1,10 @@
 import { getClinicByAccountId, getUnitById } from './_supabase.js'
 import { fetchProfessionals } from './_clinicorp.js'
 import { requireAllowedOrigin } from './_origin.js'
+import { makeAgendaHandler } from './_agenda.js'
 
 const BASE = 'https://api.clinicorp.com/rest/v1'
+const agendaHandler = makeAgendaHandler()
 
 function normTime(t) {
   if (!t) return ''
@@ -59,6 +61,9 @@ async function resolveUnit(idconta, unitId) {
 }
 
 export default async function handler(req, res) {
+  // A unidade da agenda do CRM (CRM#302) passa por aqui, sem função própria:
+  // o plano da Vercel aceita 12 funções por deploy (api/_agenda.js)
+  if (req.query?.agenda) return agendaHandler(req, res)
   if (!requireAllowedOrigin(req, res)) return
 
   const idconta = req.query?.idconta || req.headers?.['x-idconta']
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(404).json({ error: err.message })
   }
-  // Sem credencial do Clinicorp: os horários e a consulta saem do /api/agenda
+  // Sem credencial do Clinicorp: os horários e a consulta saem com ?agenda=1
   if (unit.agenda) return res.status(400).json({ error: 'Esta unidade agenda na agenda do CRM, não no Clinicorp.' })
 
   const auth        = 'Basic ' + Buffer.from(`${unit.clinicorp_user}:${unit.clinicorp_token}`).toString('base64')

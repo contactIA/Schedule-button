@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { agendaDays, agendaSlots, bookAgenda, describeAgendaError, dateIn } from './_agenda.js'
-import { makeAgendaHandler } from './agenda.js'
+import { agendaDays, agendaSlots, bookAgenda, describeAgendaError, dateIn, makeAgendaHandler } from './_agenda.js'
+import handleClinicorp from './clinicorp.js'
 import { CrmError } from './_crm.js'
 
 delete process.env.EMBED_HOSTS
@@ -139,7 +139,7 @@ function fakeRes() {
 }
 
 const req = (method, query, body) => ({
-  method, query, body, url: '/api/agenda',
+  method, query, body, url: '/api/clinicorp',
   headers: { host: APP, referer: `https://${APP}/?idconta=acc1` },
 })
 
@@ -220,4 +220,11 @@ test('rota: recusa a unidade do Clinicorp, a de outra clínica, a clínica sem c
   res = fakeRes()
   await h.handler(req('POST', { idconta: 'acc1', unitId: 'u-sul' }, { patientName: 'Maria', professionalId: 'abc', start: 'ontem' }), res)
   assert.equal(res.statusCode, 400)
+})
+
+test('rota: o /api/clinicorp com ?agenda=1 vai para a agenda, sem abrir outra função', async () => {
+  const res = fakeRes()
+  await handleClinicorp(req('GET', { agenda: '1', idconta: 'acc1' }), res)
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Parâmetros idconta e unitId obrigatórios')
 })

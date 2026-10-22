@@ -1,13 +1,12 @@
 {
   "functions": {
     "api/proxy.js":    { "maxDuration": 30 },
-    "api/clinicorp.js": { "maxDuration": 15 },
+    "api/clinicorp.js": { "maxDuration": 30 },
     "api/setup.js":    { "maxDuration": 30 },
     "api/clinic.js":         { "maxDuration": 10 },
     "api/clinics.js":        { "maxDuration": 15 },
     "api/helena-preview.js": { "maxDuration": 10 },
     "api/crm.js":            { "maxDuration": 30 },
-    "api/agenda.js":         { "maxDuration": 30 },
     "api/crm-preview.js":    { "maxDuration": 15 },
     "api/provisionamento.js": { "maxDuration": 30 }
   },

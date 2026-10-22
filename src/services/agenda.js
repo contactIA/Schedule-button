@@ -1,9 +1,9 @@
-// A unidade que marca na agenda do CRM (CRM#302), pelo /api/agenda: a chave do
-// CRM fica no servidor. Mesmo formato do clinicorp.js, mais o `start` de cada
-// horário, que volta como veio para marcar.
+// A unidade que marca na agenda do CRM (CRM#302), pelo /api/clinicorp com
+// ?agenda=1: a chave do CRM fica no servidor. Mesmo formato do clinicorp.js,
+// mais o `start` de cada horário, que volta como veio para marcar.
 
 async function call(params, options) {
-  const res = await fetch(`/api/agenda?${new URLSearchParams(params)}`, options)
+  const res = await fetch(`/api/clinicorp?${new URLSearchParams({ agenda: '1', ...params })}`, options)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || `Erro na agenda (HTTP ${res.status})`)
   return data

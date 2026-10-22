@@ -115,7 +115,7 @@ As variáveis de ambiente na Vercel são `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` 
 
 O `idconta` da URL não é segredo: aparece no item de menu de cada clínica. Por isso as rotas que o botão chama sem senha se protegem de dois jeitos:
 
-1. **Prova de origem** (`api/_origin.js`), em `/api/clinic`, `/api/proxy`, `/api/clinicorp`, `/api/agenda`, `/api/crm` e `/api/reminder-log`. O pedido só passa quando o `Origin` (ou o `Referer`, quando não há `Origin`, como no GET do próprio app) é:
+1. **Prova de origem** (`api/_origin.js`), em `/api/clinic`, `/api/proxy`, `/api/clinicorp` (também com `?agenda=1`), `/api/crm` e `/api/reminder-log`. O pedido só passa quando o `Origin` (ou o `Referer`, quando não há `Origin`, como no GET do próprio app) é:
    - do próprio app: o host que serviu o pedido, seja o domínio da Vercel, seja um domínio próprio, sem configurar nada (o front chama `/api/*` do mesmo endereço), ou um dos endereços que a Vercel dá ao deploy (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`);
    - ou de um host da variável `EMBED_HOSTS` (o host da plataforma onde o botão abre), com os subdomínios.
 
@@ -210,11 +210,11 @@ O worker do CRM manda o retrato inteiro da clínica ao salvar o cadastro com o p
 - Precisa da migração `supabase/migrations/20261008120000_provisionamento_pelo_crm.sql` (ainda não aplicada).
 - Teste: `api/_provisionamento.test.js` e, para a chave pela tabela, `api/_configuracao.test.js`.
 
-### A unidade que marca na agenda do CRM (`/api/agenda`, CRM#302)
+### A unidade que marca na agenda do CRM (`/api/clinicorp?agenda=1`, CRM#302)
 
 Na unidade com `agenda: true` (ADR 0022 do CRM, `Docs/ARCHITECTURE.md` seção 7), o passo 2 lê e marca na agenda do CRM, e não no Clinicorp:
 
-- **Rota:** `/api/agenda?idconta=&unitId=`, com prova de origem. A unidade precisa ser uma das ativas da clínica, com `agenda: true`; a clínica, ter a `crm_api_key` (sem ela, `409`). `GET &days=1` traz os dias com horário livre (de hoje a seis semanas), `GET &date=` os horários no formato dos do Clinicorp mais o `start` (o instante), e `POST` marca com `{ patientName, patientPhone, contactId, professionalId, start, appointmentNote, cardNote }`.
+- **Rota:** `/api/clinicorp?agenda=1&idconta=&unitId=`, com prova de origem, atendida por `api/_agenda.js` (sem função nova: o plano da Vercel aceita 12 por deploy, e o botão já tem as 12). A unidade precisa ser uma das ativas da clínica, com `agenda: true`; a clínica, ter a `crm_api_key` (sem ela, `409`). `GET &days=1` traz os dias com horário livre (de hoje a seis semanas), `GET &date=` os horários no formato dos do Clinicorp mais o `start` (o instante), e `POST` marca com `{ patientName, patientPhone, contactId, professionalId, start, appointmentNote, cardNote }`.
 - **No CRM:** `GET /agenda/dias-livres`, `GET /agenda/horarios-livres`, e para marcar `POST /cards` (cria ou acha o card do contato) e `POST /agenda/consultas` com o `cardId`, sem procedimento (o CRM usa o das consultas do CRM). A observação vira anotação no card que já existia.
 - **Na tela:** a consulta vem antes do card da plataforma e do lembrete; horário recusado (`409`) mostra o erro, recarrega os horários e não grava mais nada. O botão não move o card do CRM (o espelho do `/api/crm` não roda): o aviso da consulta o leva a Agendados. O histórico do paciente não aparece nessa unidade.
 - **No setup daqui,** a unidade mostra que marca na agenda do CRM, sem os campos do Clinicorp.
@@ -390,7 +390,7 @@ Base URL: `https://api.clinicorp.com/rest/v1`
 | GET | `/business/list` | businessId/codeLink no onboarding e na troca de credencial |
 | GET | `/professional/list_all_professionals` | Importa/sincroniza dentistas |
 
-### API da agenda do CRM ContactIA — via `/api/agenda`
+### API da agenda do CRM ContactIA — via `/api/clinicorp?agenda=1`
 Base URL: `CRM_API_URL` (padrão `https://crm.contactia.com.br/api/v1`), com a chave da clínica
 
 | Método | Endpoint | Finalidade |
@@ -471,7 +471,7 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 ### 2026-10-22: A unidade sem o Clinicorp marca na agenda do CRM (CRM#302)
 
 - O provisionamento aceita a unidade com `agenda: true` e `clinicorp: null`, e guarda o fuso da clínica (migração `20261022120000_unidade_da_agenda.sql`, não aplicada)
-- `/api/agenda`: os dias, os horários e a consulta pela API da agenda do CRM, com a chave da clínica; a consulta vem antes do card da plataforma e do lembrete
+- `/api/clinicorp?agenda=1`: os dias, os horários e a consulta pela API da agenda do CRM, com a chave da clínica; a consulta vem antes do card da plataforma e do lembrete
 - O setup mostra a unidade da agenda sem os campos do Clinicorp
 
 ### 2026-10-08: Setup unificado (Etapa 15 do CRM)

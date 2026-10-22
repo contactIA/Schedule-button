@@ -148,7 +148,7 @@ O botão só agendava pelo Clinicorp. Com a agenda dentro do CRM (ADR 0016 de l�
 
 ### Decisão
 1. **O retrato traz a unidade da agenda.** Com a agenda ligada na clínica, o CRM manda também as unidades sem o Clinicorp, com `agenda: true` e `clinicorp: null`. Ela grava `units.agenda = true` e as colunas do Clinicorp vazias. A unidade com o Clinicorp chega com `agenda: false` e não muda.
-2. **Os dias, os horários e a consulta saem da API da agenda do CRM** (`/api/agenda`, com a chave da clínica, `clinics.crm_api_key`): `GET /agenda/dias-livres`, `GET /agenda/horarios-livres` e `POST /agenda/consultas`. O procedimento vai vazio (o CRM usa o das consultas do CRM), e quem atende vem do cadastro da agenda; a lista de profissionais agendáveis não vale aqui.
+2. **Os dias, os horários e a consulta saem da API da agenda do CRM** (`/api/clinicorp?agenda=1`, com a chave da clínica, `clinics.crm_api_key`; o plano da Vercel aceita 12 funções por deploy, e o botão já tem as 12): `GET /agenda/dias-livres`, `GET /agenda/horarios-livres` e `POST /agenda/consultas`. O procedimento vai vazio (o CRM usa o das consultas do CRM), e quem atende vem do cadastro da agenda; a lista de profissionais agendáveis não vale aqui.
 3. **A consulta vem antes do card da plataforma e do lembrete.** É a agenda que pode recusar o horário (409); recusado, nada mais muda e a CRC escolhe outro.
 4. **O botão não move o card do CRM.** Cria o card (ou acha o aberto) e marca a consulta com o `cardId`; o aviso da consulta leva o card a Agendados. Por isso o espelho do `/api/crm` não roda quando a consulta foi para a agenda.
 5. **Os horários aparecem no fuso da clínica no CRM** (`clinics.fuso_horario`, do `fusoHorario` do retrato), porque chegam como instantes. O resto do botão segue Brasília.
