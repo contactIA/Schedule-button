@@ -218,7 +218,7 @@ Na unidade com `agenda: true` (ADR 0022 do CRM, `Docs/ARCHITECTURE.md` seção 7
 - **No CRM:** `GET /agenda/dias-livres`, `GET /agenda/horarios-livres`, e para marcar `POST /cards` (cria ou acha o card do contato) e `POST /agenda/consultas` com o `cardId`, sem procedimento (o CRM usa o das consultas do CRM). A observação vira anotação no card que já existia.
 - **Na tela:** a consulta vem antes do card da plataforma e do lembrete; horário recusado (`409`) mostra o erro, recarrega os horários e não grava mais nada. O botão não move o card do CRM (o espelho do `/api/crm` não roda): o aviso da consulta o leva a Agendados. O histórico do paciente não aparece nessa unidade.
 - **No setup daqui,** a unidade mostra que marca na agenda do CRM, sem os campos do Clinicorp.
-- Precisa da migração `supabase/migrations/20261022120000_unidade_da_agenda.sql` (ainda não aplicada) antes do deploy.
+- Precisa da migração `supabase/migrations/20261022120000_unidade_da_agenda.sql`, aplicada no Schedule-button-v2 em 2026-10-22.
 - Teste: `api/_agenda.test.js` e os casos da agenda em `api/_provisionamento.test.js`.
 
 ### Um remetente do lembrete de consulta (CRM#218)
@@ -470,7 +470,7 @@ Push na branch `main` do repositório `contactIA/Schedule-button` → deploy aut
 
 ### 2026-10-22: A unidade sem o Clinicorp marca na agenda do CRM (CRM#302)
 
-- O provisionamento aceita a unidade com `agenda: true` e `clinicorp: null`, e guarda o fuso da clínica (migração `20261022120000_unidade_da_agenda.sql`, não aplicada)
+- O provisionamento aceita a unidade com `agenda: true` e `clinicorp: null`, e guarda o fuso da clínica (migração `20261022120000_unidade_da_agenda.sql`, aplicada em 2026-10-22)
 - `/api/clinicorp?agenda=1`: os dias, os horários e a consulta pela API da agenda do CRM, com a chave da clínica; a consulta vem antes do card da plataforma e do lembrete
 - O setup mostra a unidade da agenda sem os campos do Clinicorp
 

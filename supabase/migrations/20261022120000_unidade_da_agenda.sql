@@ -1,7 +1,7 @@
--- A unidade que agenda na agenda do CRM (CRM#302, ADR 0022 do CRM). NÃO
--- APLICADA: aplicar no projeto Schedule-button-v2 só com OK da equipe, antes do
--- deploy do botão (sem estas colunas, POST /api/provisionamento falha ao gravar
--- qualquer unidade) e antes de o CRM mandar a unidade com agenda: true.
+-- A unidade que agenda na agenda do CRM (CRM#302, ADR 0022 do CRM). APLICADA
+-- no projeto Schedule-button-v2 em 2026-10-22 (unidade_da_agenda), antes do
+-- deploy do botão: sem estas colunas, POST /api/provisionamento falha ao gravar
+-- qualquer unidade. O CRM só manda a unidade com agenda: true depois do deploy.
 --
 -- units.agenda: true = a unidade não tem o Clinicorp e marca pela API da agenda
 --   do CRM, com a chave da clínica (clinics.crm_api_key). Os dias, os horários e
