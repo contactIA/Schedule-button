@@ -34,6 +34,8 @@ export function makeClinicHandler({ loadClinic = getClinicByAccountId } = {}) {
         id:             unit.id,
         name:           unit.name,
         position:       unit.position,
+        // Marca na agenda do CRM, pelo /api/clinicorp?agenda=1, e não no Clinicorp (CRM#302)
+        agenda:         unit.agenda === true,
         panelId:        unit.helena_panel_id         ?? clinic.helena_panel_id,
         agendadoStepId: unit.helena_agendado_step_id ?? clinic.helena_agendado_step_id,
         steps:          unit.helena_steps?.length

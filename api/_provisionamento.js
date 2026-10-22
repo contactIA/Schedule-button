@@ -2,7 +2,8 @@
 // clínica (nome, token da plataforma, unidades com o Clinicorp e os
 // profissionais agendáveis) e manda sempre o retrato inteiro: o último vence e
 // reenviar é seguro. Aqui o retrato vira a cópia em clinics e units, de que o
-// botão continua dependendo sozinho para agendar.
+// botão depende sozinho para agendar no Clinicorp. A unidade com agenda: true
+// (CRM#302) não tem o Clinicorp e marca pela API da agenda do CRM.
 //
 // Contrato (seção A dos contratos da onda 3): POST /api/provisionamento com
 // Authorization: Bearer <CHAVE_DE_PROVISIONAMENTO>; 200 { ok, clinicaId };
@@ -28,6 +29,15 @@ function validateUnit(u, i) {
   if (!isText(u.nome, 200)) return fail(`${where}.nome é obrigatório.`)
   if (typeof u.principal !== 'boolean') return fail(`${where}.principal precisa ser verdadeiro ou falso.`)
   if (typeof u.ativa !== 'boolean') return fail(`${where}.ativa precisa ser verdadeiro ou falso.`)
+  if (u.agenda != null && typeof u.agenda !== 'boolean') return fail(`${where}.agenda precisa ser verdadeiro ou falso.`)
+
+  // Sem o Clinicorp, numa clínica com a agenda do CRM ligada (CRM#302): marca
+  // pela API da agenda, e o clinicorp e a lista de profissionais não valem
+  if (u.agenda === true) {
+    return {
+      unit: { crmUnitId: u.crmUnitId.toLowerCase(), nome: u.nome.trim(), principal: u.principal, ativa: u.ativa, agenda: true, clinicorp: null, bookableIds: [] },
+    }
+  }
 
   const c = u.clinicorp
   if (!isObject(c)) return fail(`${where}.clinicorp é obrigatório.`, 'unidade_sem_clinicorp')
@@ -56,6 +66,7 @@ function validateUnit(u, i) {
       nome: u.nome.trim(),
       principal: u.principal,
       ativa: u.ativa,
+      agenda: false,
       clinicorp: {
         usuario: c.usuario.trim(),
         token: c.token.trim(),
@@ -105,6 +116,7 @@ export function validateSnapshot(body) {
       enviadoEm: new Date(body.enviadoEm).toISOString(),
       companyId: body.companyId.toLowerCase(),
       nome: body.nome.trim(),
+      fusoHorario: body.fusoHorario?.trim() || null,
       ligado: body.ligado,
       tokenPlataforma: body.tokenPlataforma?.trim() || null,
       enviaLembreteDeConsulta: body.enviaLembreteDeConsulta,
@@ -148,6 +160,8 @@ export async function applySnapshot(repo, snap) {
   }
   // null não apaga o token que a clínica já tem
   if (snap.tokenPlataforma) patch.helena_token = snap.tokenPlataforma
+  // Só os horários da agenda do CRM usam o fuso; o resto segue Brasília
+  if (snap.fusoHorario) patch.fuso_horario = snap.fusoHorario
   // A chave só vem aberta no envio em que o CRM a criou; sem ela, fica a
   // configuração do CRM que já está aqui
   if (snap.chaveDaApi) {
@@ -177,26 +191,31 @@ export async function applySnapshot(repo, snap) {
 
   for (let i = 0; i < snap.unidades.length; i++) {
     const u = snap.unidades[i]
+    const c = u.clinicorp
     // Pelo crm_unit_id; senão, adota a unidade cadastrada aqui à mão que é o
     // mesmo negócio do Clinicorp, ou, por último, a de mesmo nome
     const match =
       existing.find(e => !used.has(e.id) && e.crm_unit_id === u.crmUnitId) ??
-      existing.find(e => free(e) && Number(e.clinicorp_business_id) === u.clinicorp.businessId) ??
+      (c ? existing.find(e => free(e) && Number(e.clinicorp_business_id) === c.businessId) : null) ??
       existing.find(e => free(e) && sameName(e.name, u.nome)) ??
       null
 
     const row = {
       name: u.nome,
       position: i,
-      clinicorp_user: u.clinicorp.usuario,
-      clinicorp_token: u.clinicorp.token,
+      agenda: u.agenda,
+      // Na unidade da agenda do CRM, as colunas do Clinicorp ficam vazias
+      clinicorp_user: c?.usuario ?? null,
+      clinicorp_token: c?.token ?? null,
       // Sem subscriberId ou codeLink no retrato, fica o da unidade adotada
       // (o code_link é o que lista os horários); senão, o padrão do setup daqui
-      clinicorp_subscriber_id: u.clinicorp.subscriberId ||
-        (match?.clinicorp_user === u.clinicorp.usuario && match?.clinicorp_subscriber_id) || u.clinicorp.usuario,
-      clinicorp_business_id: u.clinicorp.businessId,
-      clinicorp_code_link: u.clinicorp.codeLink ||
-        (Number(match?.clinicorp_business_id) === u.clinicorp.businessId && match?.clinicorp_code_link) || '0',
+      clinicorp_subscriber_id: c
+        ? c.subscriberId || (match?.clinicorp_user === c.usuario && match?.clinicorp_subscriber_id) || c.usuario
+        : null,
+      clinicorp_business_id: c?.businessId ?? null,
+      clinicorp_code_link: c
+        ? c.codeLink || (Number(match?.clinicorp_business_id) === c.businessId && match?.clinicorp_code_link) || '0'
+        : null,
       bookable_professional_ids: u.bookableIds.length > 0 ? u.bookableIds : null,
       crm_unit_id: u.crmUnitId,
       active: u.ativa,

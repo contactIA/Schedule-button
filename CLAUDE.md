@@ -28,10 +28,11 @@ Administradores cadastram e editam clínicas em `/setup` (senha em `ADMIN_PASSWO
 ```
 src/components/   → Componentes visuais puros (Calendar, SlotPicker, TagChips)
 src/pages/        → Setup.jsx (painel admin: cadastro, edição, unidades, avaliadores)
-src/services/     → Chamadas a APIs externas (helena.js, clinicorp.js)
+src/services/     → Chamadas a APIs externas (helena.js, clinicorp.js, agenda.js)
 src/utils/        → Helpers puros (date.js)
 api/clinic.js     → Config pública da clínica por ?idconta= (runtime do botão)
-api/clinicorp.js  → Slots, dias disponíveis, histórico e criação de agendamento
+api/clinicorp.js  → Slots, dias disponíveis, histórico e criação de agendamento; com ?agenda=1, a unidade da agenda do CRM
+api/_agenda.js    → Dias, horários e marcar na agenda do CRM (CRM#302), a rota do ?agenda=1 e o erro em frase para a CRC
 api/proxy.js      → Proxy das chamadas à API Helena (lista de caminhos, resolve CORS + injeta token)
 api/setup.js      → Cadastro de clínica (admin)
 api/clinics.js    → Lista/detalhe/edição de clínicas, sync de profissionais (admin)
@@ -54,7 +55,7 @@ api/_scheduled-message.js → normalizeScheduledMessage (clinic.js e proxy.js)
 
 O frontend nunca chama Clinicorp/Helena diretamente — sempre via `api/`. Tokens (Helena e Clinicorp) são write-only nas rotas admin: entram via POST/PUT mas nunca voltam em GET.
 
-Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `proxy`, `clinicorp`, `crm` e `reminder-log` chamam `requireAllowedOrigin` primeiro (Origin ou Referer do próprio host ou de `EMBED_HOSTS`, senão 403). Rota nova que o front chama sem senha faz o mesmo. O proxy só repassa os caminhos e métodos da lista `ROUTES` em `api/proxy.js`: chamada nova à plataforma no front entra na lista, e o teste de contrato (`api/_proxy.test.js`, que roda `src/services/helena.js`) falha se faltar. Teste de função fica em `api/_*.test.js` (com `_`, para a Vercel não publicar como rota).
+Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `proxy`, `clinicorp` (também com `?agenda=1`), `crm` e `reminder-log` chamam `requireAllowedOrigin` primeiro (Origin ou Referer do próprio host ou de `EMBED_HOSTS`, senão 403). Rota nova que o front chama sem senha faz o mesmo. O proxy só repassa os caminhos e métodos da lista `ROUTES` em `api/proxy.js`: chamada nova à plataforma no front entra na lista, e o teste de contrato (`api/_proxy.test.js`, que roda `src/services/helena.js`) falha se faltar. Teste de função fica em `api/_*.test.js` (com `_`, para a Vercel não publicar como rota).
 
 ---
 
@@ -63,7 +64,8 @@ Rotas do operador (sem senha): o `idconta` não é segredo, então `clinic`, `pr
 | O quê | Onde |
 |---|---|
 | Token Helena da clínica | Supabase `clinics.helena_token` |
-| Credenciais Clinicorp | Supabase `units.clinicorp_user/token/subscriber_id` |
+| Credenciais Clinicorp | Supabase `units.clinicorp_user/token/subscriber_id` (vazias na unidade com `units.agenda = true`) |
+| Fuso da clínica (só os horários da agenda do CRM) | Supabase `clinics.fuso_horario`, do retrato do CRM |
 | Conexão Supabase | env vars `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` |
 | Senha do painel admin | env var `ADMIN_PASSWORD` (server-side, fail-closed) |
 | Chave da API do CRM ContactIA | Supabase `clinics.crm_api_key` (write-only no Setup, como o token Helena) |
@@ -90,6 +92,19 @@ A clínica é identificada por `?idconta=` (companyId da conta Helena → `clini
 - Erros de API logam no console com prefixo `[NomeDoServico]` para facilitar debug
 - Falhas em recursos informativos (histórico, disponibilidade, lembrete) nunca bloqueiam o fluxo principal
 - **Fuso canônico: America/Sao_Paulo (UTC-3 fixo).** Nunca use `new Date('YYYY-MM-DDTHH:mm')` sem offset — isso adota o fuso da máquina do operador. Use `toBrasiliaIso`/`prevDateStr`/`brTodayStr` de `src/utils/date.js`; no backend (Vercel roda em UTC), ancore a data com `Date.now() - 3 * 3600000`
+
+---
+
+## Unidade da agenda do CRM (CRM#302)
+
+A unidade sem o Clinicorp numa clínica com a agenda do CRM ligada chega pelo provisionamento com `agenda: true` (`units.agenda`), sem credencial do Clinicorp. Nela o passo 2 usa o `/api/clinicorp?agenda=1` (sem o `agenda`, o `/api/clinicorp` recusa a unidade): os dias, os horários e a consulta saem da API da agenda do CRM, com a `clinics.crm_api_key`. Regras:
+
+- **A consulta vem antes** do card da plataforma e do lembrete; horário recusado (409) não grava mais nada.
+- **O botão não move o card do CRM:** cria o card (ou acha o aberto) e marca com o `cardId`; o aviso da consulta leva o card a Agendados. Por isso o `syncCrmCard` não roda quando a consulta foi para a agenda.
+- **O procedimento vai vazio** (o CRM usa o das consultas do CRM), e quem atende vem do cadastro da agenda: `bookable_professional_ids` não vale ali.
+- **Os horários chegam como instantes:** o `start` volta como veio para marcar, e o HH:mm da tela sai no `clinics.fuso_horario`.
+- **Sem função nova na Vercel:** o plano aceita 12 funções por deploy e o botão já tem as 12. Por isso a rota da agenda é o `?agenda=1` do `api/clinicorp.js`, e o código fica em `api/_agenda.js`. Rota nova entra do mesmo jeito, num arquivo com `_`.
+- Código novo que use as colunas do Clinicorp de uma unidade confere `unit.agenda` antes. Migração: `20261022120000_unidade_da_agenda.sql`. Teste: `api/_agenda.test.js`.
 
 ---
 
